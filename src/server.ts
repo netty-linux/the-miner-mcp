@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Implementation } from "@modelcontextprotocol/sdk/types.js";
-import { env } from "./config/env.js";
+import { buildServerIcons } from "./lib/server-icons.js";
 import { registerTools } from "./tools/index.js";
 
 export const SERVER_NAME = "The Miner MCP";
@@ -13,13 +13,7 @@ export const SERVER_INFO: Implementation = {
   description:
     "MCP especializado em mineração de ofertas e produtos em alta escala — Reddit, YouTube, Facebook, SEO e relatórios.",
   websiteUrl: "https://github.com/netty-linux/the-miner-mcp",
-  icons: [
-    {
-      src: `${env.publicBaseUrl}/logo-mcp.png`,
-      mimeType: "image/png",
-      sizes: ["any", "256x256", "512x512"],
-    },
-  ],
+  icons: buildServerIcons(),
 };
 
 /**

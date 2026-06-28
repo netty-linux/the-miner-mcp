@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { join } from "node:path";
+import express from "express";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { env } from "./config/env.js";
@@ -37,8 +38,10 @@ function optionalAuthMiddleware(req: Request, res: Response, next: NextFunction)
 }
 
 const app = createMcpExpressApp({ host: env.host });
+const publicDir = join(process.cwd(), "public");
 const logoPath = join(process.cwd(), "logo-mcp.png");
 
+app.use(express.static(publicDir, { maxAge: "7d", index: false }));
 app.get("/logo-mcp.png", (_req, res) => {
   res.type("image/png");
   res.sendFile(logoPath, (error) => {
@@ -46,6 +49,9 @@ app.get("/logo-mcp.png", (_req, res) => {
       res.status(404).json({ error: "Logo not found" });
     }
   });
+});
+app.get("/favicon.ico", (_req, res) => {
+  res.sendFile(join(publicDir, "favicon.png"));
 });
 
 app.get("/health", async (_req, res) => {

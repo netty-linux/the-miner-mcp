@@ -1,7 +1,12 @@
 import { z } from "zod";
 import { scrapePage, detectTriggers } from "../lib/scraping.js";
 import { logger } from "../lib/logger.js";
-import { toolSuccessResult } from "../lib/errors.js";
+import { toolRichResult } from "../lib/errors.js";
+import {
+  buildCompetitorVisualMarkdown,
+  generateFunnelStepsSvg,
+  svgToBase64,
+} from "../lib/visualizations.js";
 
 export const scrapeCompetitorDataSchema = z.object({
   url: z.string().url().describe("Competitor product page, checkout, or funnel URL"),
@@ -111,6 +116,27 @@ export async function scrapeCompetitorData(args: ScrapeCompetitorDataInput) {
     ...mainPage.paragraphs,
   ].join(" ");
 
+  const platform = detectPlatform(mainPage.scripts, mainPage.links);
+  const triggers = detectTriggers(allText);
+
+  const visualMarkdown = buildCompetitorVisualMarkdown({
+    competitorUrl: url,
+    depth,
+    funnelSteps,
+    pricing: mainPage.prices,
+    psychologicalTriggers: triggers,
+    platform,
+    competitiveInsights: [
+      funnelSteps.length > 2 ? "Multi-step funnel detected — competitor invests in conversion optimization." : "Single-page funnel — simpler conversion path.",
+      mainPage.prices.length > 0 ? `Pricing visible: ${mainPage.prices.join(", ")}` : "No explicit pricing on main page — likely lead-first or call funnel.",
+      mainPage.ctaButtons.length > 3 ? "Multiple CTAs — aggressive conversion approach." : "Focused CTA strategy.",
+    ],
+  });
+
+  const funnelChart = generateFunnelStepsSvg(
+    funnelSteps.map((s) => ({ step: s.step, type: s.type, title: s.title })),
+  );
+
   const result = {
     competitorUrl: url,
     depth,
@@ -124,14 +150,15 @@ export async function scrapeCompetitorData(args: ScrapeCompetitorDataInput) {
     funnelSteps,
     funnelLength: funnelSteps.length,
     pricing: mainPage.prices,
-    psychologicalTriggers: detectTriggers(allText),
+    psychologicalTriggers: triggers,
     ctaButtons: mainPage.ctaButtons,
     topHeadings: mainPage.headings.slice(0, 8),
     keyCopy: mainPage.paragraphs.slice(0, 3),
     techIndicators: {
       scripts: mainPage.scripts.slice(0, 5),
-      platform: detectPlatform(mainPage.scripts, mainPage.links),
+      platform,
     },
+    visualSummary: { markdown: visualMarkdown },
     competitiveInsights: [
       funnelSteps.length > 2 ? "Multi-step funnel detected — competitor invests in conversion optimization." : "Single-page funnel — simpler conversion path.",
       mainPage.prices.length > 0 ? `Pricing visible: ${mainPage.prices.join(", ")}` : "No explicit pricing on main page — likely lead-first or call funnel.",
@@ -140,7 +167,12 @@ export async function scrapeCompetitorData(args: ScrapeCompetitorDataInput) {
     scrapedAt: new Date().toISOString(),
   };
 
-  return toolSuccessResult(result);
+  return toolRichResult(result, {
+    visualMarkdown,
+    images: [
+      { data: svgToBase64(funnelChart), mimeType: "image/svg+xml", title: "Competitor Funnel" },
+    ],
+  });
 }
 
 function detectPlatform(

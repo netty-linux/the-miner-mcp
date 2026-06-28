@@ -1,7 +1,13 @@
 import { z } from "zod";
 import { scrapePage, detectTriggers } from "../lib/scraping.js";
 import { logger } from "../lib/logger.js";
-import { toolSuccessResult } from "../lib/errors.js";
+import { toolRichResult } from "../lib/errors.js";
+import {
+  buildLandingPageVisualMarkdown,
+  generateScoreGaugeSvg,
+  generateTriggerBarsSvg,
+  svgToBase64,
+} from "../lib/visualizations.js";
 
 export const analyzeLandingPageSchema = z.object({
   url: z.string().url().describe("Landing page or checkout URL to analyze"),
@@ -68,6 +74,19 @@ export async function analyzeLandingPage(args: AnalyzeLandingPageInput) {
     hasScarcity: triggers.some((t) => t.includes("scarcity")),
   };
 
+  const conversionScore = calculateConversionScore(triggers, offerAnalysis, copyStructure);
+
+  const visualMarkdown = buildLandingPageVisualMarkdown({
+    url,
+    title: pageData.title,
+    funnelType,
+    conversionScore,
+    psychologicalTriggers: triggers,
+    ctaButtons: pageData.ctaButtons,
+    offerAnalysis,
+    copyStructure,
+  });
+
   const result = {
     url,
     scrapingMetadata: pageData.metadata,
@@ -86,12 +105,19 @@ export async function analyzeLandingPage(args: AnalyzeLandingPageInput) {
       scripts: pageData.scripts.slice(0, 8),
       imageCount: pageData.images.length,
     },
-    conversionScore: calculateConversionScore(triggers, offerAnalysis, copyStructure),
+    conversionScore,
+    visualSummary: { markdown: visualMarkdown },
     recommendations: generateLandingRecommendations(triggers, offerAnalysis, copyStructure),
     analyzedAt: new Date().toISOString(),
   };
 
-  return toolSuccessResult(result);
+  return toolRichResult(result, {
+    visualMarkdown,
+    images: [
+      { data: svgToBase64(generateScoreGaugeSvg(conversionScore, "Conversion Score")), mimeType: "image/svg+xml", title: "Conversion Score" },
+      { data: svgToBase64(generateTriggerBarsSvg(triggers, conversionScore)), mimeType: "image/svg+xml", title: "Psychological Triggers" },
+    ],
+  });
 }
 
 function calculateConversionScore(

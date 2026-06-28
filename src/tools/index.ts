@@ -64,7 +64,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Mine Trending Products",
       description:
-        "Discover products and offers scaling sales globally. Combines Reddit social signals and Google Trends data to identify high-momentum opportunities.",
+        "Discover trending products via Reddit and Google Trends. Returns visual markdown, trend score chart (SVG), embed links, plus structured JSON.",
       inputSchema: mineTrendingProductsSchema.shape,
     },
     async (args) =>
@@ -76,7 +76,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Analyze Facebook Ads",
       description:
-        "Analyze Facebook Ad Library creatives and campaigns for a product or keyword. Detects scaling signals from active ad volume and advertiser count.",
+        "Analyze Facebook Ad Library creatives and campaigns. Returns visual markdown, SVG chart, embed link to Ad Library, plus structured JSON with scaling signals.",
       inputSchema: analyzeFacebookAdsSchema.shape,
     },
     async (args) =>
@@ -88,7 +88,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Analyze TikTok Creatives",
       description:
-        "Analyze trending TikTok ad creatives and hooks from TikTok Creative Center. Identifies viral formats and high-engagement creative patterns.",
+        "Analyze TikTok Creative Center ads and hooks. Returns visual markdown, format chart (SVG), Creative Center embed link, plus structured JSON.",
       inputSchema: analyzeTiktokCreativesSchema.shape,
     },
     async (args) =>
@@ -100,7 +100,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Analyze YouTube Trends",
       description:
-        "Analyze YouTube video trends for a keyword — views, engagement, title patterns. VidiQ-style competitive intelligence for content strategy.",
+        "Analyze YouTube video trends for a keyword. Returns visual markdown with top videos, Mermaid chart, SVG views chart, embed links, plus structured JSON metrics.",
       inputSchema: analyzeYoutubeTrendsSchema.shape,
     },
     async (args) =>
@@ -112,7 +112,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Analyze Google SEO",
       description:
-        "Research search volume signals, related keywords, autocomplete suggestions, and organic competition for a target keyword.",
+        "Research SEO signals from Google Trends, PAA, Reddit, Wikipedia. Returns visual markdown, opportunity gauge + regional chart (SVG), embed links, plus JSON.",
       inputSchema: analyzeGoogleSeoSchema.shape,
     },
     async (args) =>
@@ -124,7 +124,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Analyze Landing Page",
       description:
-        "Extract and analyze landing page/checkout structure, copy, offers, psychological triggers, CTAs, and conversion elements from any URL.",
+        "Analyze landing page conversion elements, triggers, CTAs, and offers. Returns visual markdown, conversion score gauge + trigger chart (SVG), plus JSON.",
       inputSchema: analyzeLandingPageSchema.shape,
     },
     async (args) =>
@@ -136,7 +136,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Scrape Competitor Data",
       description:
-        "Intelligent scraping of competitor product pages, checkouts, and funnels. Supports shallow (single page) and deep (multi-step funnel) analysis.",
+        "Scrape competitor funnels and pricing. Returns visual markdown with Mermaid funnel flow, SVG funnel diagram, insights, plus structured JSON.",
       inputSchema: scrapeCompetitorDataSchema.shape,
     },
     async (args) =>
@@ -148,7 +148,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Generate Mining Report",
       description:
-        "Synthesize collected mining data into an intelligent structured report with executive summary, metrics, scale potential analysis, recommendations, and opportunity score (0-100).",
+        "Synthesize collected mining data into a rich visual report: markdown summary with Mermaid charts, SVG score/channel charts (image blocks), embed links (Ad Library, Trends, YouTube), plus structured JSON with opportunity score (0-100).",
       inputSchema: generateMiningReportSchema.shape,
     },
     async (args) =>

@@ -1,7 +1,12 @@
 import { z } from "zod";
 import { synthesizeMiningReport, type MiningDataInput } from "../lib/report-synthesizer.js";
 import { logger } from "../lib/logger.js";
-import { toolSuccessResult } from "../lib/errors.js";
+import { toolRichResult } from "../lib/errors.js";
+import {
+  buildMiningReportCharts,
+  buildMiningReportVisualMarkdown,
+  svgToBase64,
+} from "../lib/visualizations.js";
 
 const trendingProductSchema = z.object({
   name: z.string(),
@@ -83,18 +88,39 @@ export async function generateMiningReport(args: GenerateMiningReportInput) {
   };
 
   const report = synthesizeMiningReport(input);
+  const dataSourcesUsed = countDataSources(collected_data);
+  const charts = buildMiningReportCharts(report, input);
+  const visualMarkdown = buildMiningReportVisualMarkdown(report, input, dataSourcesUsed);
 
   const result = {
     report,
+    visualSummary: {
+      markdown: visualMarkdown,
+      charts: {
+        scoreGauge: "attached",
+        scoreBreakdown: "attached",
+        channelStatus: "attached",
+      },
+      embeds: {
+        hint: "Use os links no markdown visual para abrir Ad Library, Google Trends e YouTube.",
+      },
+    },
     metadata: {
       productName: product_name ?? niche ?? "unspecified",
       country: country ?? "global",
-      dataSourcesUsed: countDataSources(collected_data),
+      dataSourcesUsed,
       generatedAt: report.generatedAt,
     },
   };
 
-  return toolSuccessResult(result);
+  return toolRichResult(result, {
+    visualMarkdown,
+    images: [
+      { data: svgToBase64(charts.scoreGauge), mimeType: "image/svg+xml", title: "Opportunity Score" },
+      { data: svgToBase64(charts.scoreBreakdown), mimeType: "image/svg+xml", title: "Score Breakdown" },
+      { data: svgToBase64(charts.channelStatus), mimeType: "image/svg+xml", title: "Channel Evidence" },
+    ],
+  });
 }
 
 function countDataSources(data: GenerateMiningReportInput["collected_data"]): string[] {

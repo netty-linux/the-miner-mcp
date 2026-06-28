@@ -1,4 +1,16 @@
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult, ContentBlock } from "@modelcontextprotocol/sdk/types.js";
+
+export interface ToolImage {
+  data: string;
+  mimeType: string;
+  title?: string;
+}
+
+export interface RichToolResultOptions {
+  visualMarkdown?: string;
+  images?: ToolImage[];
+  includeJson?: boolean;
+}
 
 export class MinerToolError extends Error {
   constructor(
@@ -35,7 +47,38 @@ export function toolErrorResult(error: unknown): CallToolResult {
 }
 
 export function toolSuccessResult<T>(data: T): CallToolResult {
-  return {
-    content: [{ type: "text", text: JSON.stringify({ success: true, data }, null, 2) }],
-  };
+  return toolRichResult(data);
+}
+
+export function toolRichResult<T>(data: T, options: RichToolResultOptions = {}): CallToolResult {
+  const content: ContentBlock[] = [];
+  const includeJson = options.includeJson ?? true;
+
+  if (options.visualMarkdown) {
+    content.push({ type: "text", text: options.visualMarkdown });
+  }
+
+  if (includeJson) {
+    content.push({
+      type: "text",
+      text: JSON.stringify({ success: true, data }, null, 2),
+    });
+  }
+
+  for (const image of options.images ?? []) {
+    content.push({
+      type: "image",
+      data: image.data,
+      mimeType: image.mimeType,
+      annotations: image.title
+        ? { audience: ["assistant", "user"], priority: 0.8 }
+        : undefined,
+      _meta: image.title ? { title: image.title } : undefined,
+    });
+  }
+
+  const structuredContent =
+    typeof data === "object" && data !== null ? (data as Record<string, unknown>) : { value: data };
+
+  return { content, structuredContent };
 }

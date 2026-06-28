@@ -18,11 +18,24 @@ describe("generateMiningReport tool", () => {
     });
 
     assert.equal(result.isError, undefined);
-    const text = result.content[0]?.text ?? "";
-    const parsed = JSON.parse(text) as { success: boolean; data: { report: { opportunityScore: number } } };
+    assert.ok(result.content.length >= 2, "rich result should include markdown + JSON");
+
+    const markdown = result.content[0]?.text ?? "";
+    assert.ok(markdown.includes("Relatório Visual"));
+
+    const jsonBlock = result.content.find((c) => c.type === "text" && c.text.includes('"success"'));
+    const parsed = JSON.parse(jsonBlock?.text ?? "{}") as {
+      success: boolean;
+      data: { report: { opportunityScore: number }; visualSummary: { markdown: string } };
+    };
     assert.equal(parsed.success, true);
     assert.ok(parsed.data.report.opportunityScore >= 0);
     assert.ok(parsed.data.report.opportunityScore <= 100);
+    assert.ok(parsed.data.visualSummary.markdown.length > 0);
+
+    const images = result.content.filter((c) => c.type === "image");
+    assert.equal(images.length, 3, "mining report should attach 3 SVG charts");
+    assert.ok(result.structuredContent);
   });
 });
 

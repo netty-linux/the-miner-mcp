@@ -3,7 +3,8 @@ import { env } from "../config/env.js";
 import { fetchText } from "../lib/http.js";
 import { buildSourceStatus } from "../lib/data-availability.js";
 import { logger } from "../lib/logger.js";
-import { toolSuccessResult } from "../lib/errors.js";
+import { toolRichResult } from "../lib/errors.js";
+import { buildTiktokVisualMarkdown, generateBarChartSvg, svgToBase64 } from "../lib/visualizations.js";
 
 export const analyzeTiktokCreativesSchema = z.object({
   keyword: z.string().describe("Keyword or product to search in TikTok creatives"),
@@ -105,6 +106,36 @@ export async function analyzeTiktokCreatives(args: AnalyzeTiktokCreativesInput) 
   const topHooks = creatives.slice(0, 5).map((c) => c.hook);
   const formats = [...new Set(creatives.map((c) => c.format))];
 
+  const scalingSignal =
+    creatives.length === 0
+      ? "UNAVAILABLE — TikTok Creative Center blocked or no matches"
+      : creatives.length >= 5
+        ? "MODERATE — multiple creatives found (verify metrics manually)"
+        : creatives.length >= 1
+          ? "LOW — limited creative data"
+          : "NONE";
+
+  const visualMarkdown = buildTiktokVisualMarkdown({
+    keyword,
+    country,
+    totalFound: creatives.length,
+    avgLikes,
+    scalingSignal,
+    topHooks,
+    popularFormats: formats,
+  });
+
+  const formatCounts = formats.map((f) => ({
+    label: f,
+    value: creatives.filter((c) => c.format === f).length,
+    color: "#ec4899",
+  }));
+
+  const formatChart =
+    formatCounts.length > 0
+      ? generateBarChartSvg("Creative Formats", formatCounts, 480, 280)
+      : null;
+
   const result = {
     query: { keyword, country, industry },
     dataSource: "tiktok_creative_center",
@@ -113,17 +144,11 @@ export async function analyzeTiktokCreatives(args: AnalyzeTiktokCreativesInput) 
     apiKeyUsed: Boolean(env.tiktokAccessToken),
     totalFound: creatives.length,
     avgLikes,
-    scalingSignal:
-      creatives.length === 0
-        ? "UNAVAILABLE — TikTok Creative Center blocked or no matches"
-        : creatives.length >= 5
-          ? "MODERATE — multiple creatives found (verify metrics manually)"
-          : creatives.length >= 1
-            ? "LOW — limited creative data"
-            : "NONE",
+    scalingSignal,
     topCreatives: creatives.slice(0, 8),
     topHooks,
     popularFormats: formats,
+    visualSummary: { markdown: visualMarkdown },
     recommendations: [
       creatives.length > 0
         ? `Found ${creatives.length} real creatives — study ${formats[0] ?? "UGC"} format hooks`
@@ -135,5 +160,10 @@ export async function analyzeTiktokCreatives(args: AnalyzeTiktokCreativesInput) 
     analyzedAt: new Date().toISOString(),
   };
 
-  return toolSuccessResult(result);
+  return toolRichResult(result, {
+    visualMarkdown,
+    images: formatChart
+      ? [{ data: svgToBase64(formatChart), mimeType: "image/svg+xml", title: "TikTok Formats Chart" }]
+      : undefined,
+  });
 }

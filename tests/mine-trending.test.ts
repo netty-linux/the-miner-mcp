@@ -13,8 +13,8 @@ describe("mine-trending-products structure", () => {
       time_period: "last_7_days",
     });
 
-    const text = result.content[0]?.text ?? "";
-    const parsed = JSON.parse(text) as {
+    const jsonBlock = result.content.find((c) => c.type === "text" && c.text.includes('"success"'));
+    const parsed = JSON.parse(jsonBlock?.text ?? "{}") as {
       success: boolean;
       data: {
         trendingProducts: Array<{ trendScore: number; rawMetrics: unknown }>;

@@ -7,7 +7,12 @@ import {
   isRedditApiConfigured,
 } from "../lib/reddit-client.js";
 import { logger } from "../lib/logger.js";
-import { toolSuccessResult } from "../lib/errors.js";
+import { toolRichResult } from "../lib/errors.js";
+import {
+  buildTrendingProductsVisualMarkdown,
+  generateBarChartSvg,
+  svgToBase64,
+} from "../lib/visualizations.js";
 
 export const mineTrendingProductsSchema = z.object({
   niche: z.string().optional().describe("Product niche or category (e.g. fitness, beauty, pets)"),
@@ -285,6 +290,27 @@ export async function mineTrendingProducts(args: MineTrendingProductsInput) {
   const hasScalingSignals = uniqueTrending.length > 0;
   const availability = scalingDataAvailability(uniqueTrending.length, sourceStatuses);
 
+  const visualMarkdown = buildTrendingProductsVisualMarkdown({
+    niche,
+    country,
+    dataAvailability: availability,
+    totalTrendingProducts: uniqueTrending.length,
+    trendingProducts: uniqueTrending.slice(0, 15),
+    keywordIdeas: autocomplete.keywordIdeas,
+    topPick: uniqueTrending[0] ?? null,
+  });
+
+  const trendBars = uniqueTrending.slice(0, 6).map((p, i) => ({
+    label: `P${i + 1}`,
+    value: p.trendScore,
+    color: p.estimatedMomentum === "rising" ? "#22c55e" : "#f59e0b",
+  }));
+
+  const trendChart =
+    trendBars.length > 0
+      ? generateBarChartSvg("Trend Scores (Top Products)", trendBars, 560, 300)
+      : null;
+
   const result = {
     query: { niche, country, time_period: timePeriod },
     dataAvailability: availability,
@@ -294,6 +320,7 @@ export async function mineTrendingProducts(args: MineTrendingProductsInput) {
     trendingProducts: uniqueTrending.slice(0, 15),
     topPick: uniqueTrending[0] ?? null,
     keywordIdeas: autocomplete.keywordIdeas,
+    visualSummary: { markdown: visualMarkdown },
     analysisNotes: [
       "trendingProducts require verified metrics (Google traffic, Reddit upvotes). No rank-based heuristics.",
       "keywordIdeas are autocomplete suggestions for research — NOT evidence of scaling sales.",
@@ -307,5 +334,10 @@ export async function mineTrendingProducts(args: MineTrendingProductsInput) {
     minedAt: new Date().toISOString(),
   };
 
-  return toolSuccessResult(result);
+  return toolRichResult(result, {
+    visualMarkdown,
+    images: trendChart
+      ? [{ data: svgToBase64(trendChart), mimeType: "image/svg+xml", title: "Trending Products Chart" }]
+      : undefined,
+  });
 }

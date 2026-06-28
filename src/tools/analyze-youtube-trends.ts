@@ -4,7 +4,8 @@ import { fetchJson, fetchText } from "../lib/http.js";
 import { buildSourceStatus, type SourceStatus } from "../lib/data-availability.js";
 import { parseYouTubeSearchHtml } from "../lib/youtube-parser.js";
 import { logger } from "../lib/logger.js";
-import { toolSuccessResult } from "../lib/errors.js";
+import { toolRichResult } from "../lib/errors.js";
+import { buildYoutubeVisualMarkdown, generateBarChartSvg, svgToBase64 } from "../lib/visualizations.js";
 
 export const analyzeYoutubeTrendsSchema = z.object({
   keyword: z.string().describe("Keyword or product to analyze on YouTube"),
@@ -180,6 +181,31 @@ export async function analyzeYoutubeTrends(args: AnalyzeYoutubeTrendsInput) {
             ? "PARTIAL — videos found; limited metrics without API key"
             : "LOW — limited YouTube presence";
 
+  const visualMarkdown = buildYoutubeVisualMarkdown({
+    keyword,
+    country,
+    totalVideos: videos.length,
+    avgViews,
+    scalingSignal,
+    topTitles,
+    topVideos: videos.slice(0, 8),
+  });
+
+  const viewBars = [...videos]
+    .filter((v) => v.viewCount && v.viewCount > 0)
+    .sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0))
+    .slice(0, 6)
+    .map((v, i) => ({
+      label: `Video ${i + 1}`,
+      value: Math.round((v.viewCount ?? 0) / 1000),
+      color: "#ef4444",
+    }));
+
+  const viewsChart =
+    viewBars.length > 0
+      ? generateBarChartSvg("Top Videos (views in thousands)", viewBars, 560, 300)
+      : null;
+
   const result = {
     query: { keyword, country, max_results },
     dataSource,
@@ -193,6 +219,7 @@ export async function analyzeYoutubeTrends(args: AnalyzeYoutubeTrendsInput) {
     topVideos: videos.slice(0, 8),
     topTitles,
     titlePatterns: extractTitlePatterns(topTitles),
+    visualSummary: { markdown: visualMarkdown },
     recommendations: [
       !env.youtubeApiKey
         ? "Set YOUTUBE_API_KEY for verified view counts, likes, comments, and engagement rates."
@@ -206,7 +233,12 @@ export async function analyzeYoutubeTrends(args: AnalyzeYoutubeTrendsInput) {
     analyzedAt: new Date().toISOString(),
   };
 
-  return toolSuccessResult(result);
+  return toolRichResult(result, {
+    visualMarkdown,
+    images: viewsChart
+      ? [{ data: svgToBase64(viewsChart), mimeType: "image/svg+xml", title: "YouTube Views Chart" }]
+      : undefined,
+  });
 }
 
 function extractTitlePatterns(titles: string[]): string[] {

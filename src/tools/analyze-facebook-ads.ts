@@ -6,7 +6,8 @@ import { parseFacebookAdLibraryHtml } from "../lib/facebook-ad-parser.js";
 import { fetchHtml } from "../lib/scraping.js";
 import { buildSourceStatus } from "../lib/data-availability.js";
 import { logger } from "../lib/logger.js";
-import { toolSuccessResult } from "../lib/errors.js";
+import { toolRichResult } from "../lib/errors.js";
+import { buildFacebookVisualMarkdown, generateBarChartSvg, svgToBase64 } from "../lib/visualizations.js";
 
 export const analyzeFacebookAdsSchema = z.object({
   product_name: z.string().optional().describe("Product name to search in Ad Library"),
@@ -152,6 +153,30 @@ export async function analyzeFacebookAds(args: AnalyzeFacebookAdsInput) {
             ? "LOW — few active ads"
             : "NONE — no active ads found";
 
+  const visualMarkdown = buildFacebookVisualMarkdown({
+    searchTerm,
+    country,
+    totalAds: ads.length,
+    activeAds: activeAds.length,
+    uniqueAdvertisers: uniqueAdvertisers.length,
+    scalingSignal,
+    advertisers: uniqueAdvertisers.slice(0, 10),
+  });
+
+  const adsChart =
+    ads.length > 0
+      ? generateBarChartSvg(
+          "Facebook Ads Overview",
+          [
+            { label: "Total", value: ads.length, color: "#3b82f6" },
+            { label: "Active", value: activeAds.length, color: "#22c55e" },
+            { label: "Advertisers", value: uniqueAdvertisers.length, color: "#f59e0b" },
+          ],
+          480,
+          280,
+        )
+      : null;
+
   const result = {
     query: { searchTerm, country },
     dataSource,
@@ -169,6 +194,7 @@ export async function analyzeFacebookAds(args: AnalyzeFacebookAdsInput) {
       started: a.adDeliveryStartTime,
     })),
     advertisers: uniqueAdvertisers.slice(0, 10),
+    visualSummary: { markdown: visualMarkdown },
     recommendations: [
       ads.length === 0 && apiError?.includes("verificação de identidade")
         ? "Complete a verificação de identidade em https://www.facebook.com/ads/library/api e regenere o token com ads_read."
@@ -185,5 +211,10 @@ export async function analyzeFacebookAds(args: AnalyzeFacebookAdsInput) {
     analyzedAt: new Date().toISOString(),
   };
 
-  return toolSuccessResult(result);
+  return toolRichResult(result, {
+    visualMarkdown,
+    images: adsChart
+      ? [{ data: svgToBase64(adsChart), mimeType: "image/svg+xml", title: "Facebook Ads Chart" }]
+      : undefined,
+  });
 }

@@ -16,7 +16,13 @@ import {
   type RelatedKeyword,
 } from "../lib/google-seo-sources.js";
 import { logger } from "../lib/logger.js";
-import { toolSuccessResult } from "../lib/errors.js";
+import { toolRichResult } from "../lib/errors.js";
+import {
+  buildGoogleSeoVisualMarkdown,
+  generateBarChartSvg,
+  generateScoreGaugeSvg,
+  svgToBase64,
+} from "../lib/visualizations.js";
 
 export const analyzeGoogleSeoSchema = z.object({
   keyword: z.string().describe("Primary keyword to analyze"),
@@ -132,6 +138,36 @@ export async function analyzeGoogleSeo(args: AnalyzeGoogleSeoInput) {
   }
 
   const dataAvailability = overallAvailability(sourceStatuses);
+  const seoOpportunity = buildSeoOpportunity(searchVolume, competition);
+
+  const visualMarkdown = buildGoogleSeoVisualMarkdown({
+    keyword,
+    country,
+    searchVolume,
+    competition,
+    seoOpportunity,
+    risingKeywords: trends.risingKeywords.slice(0, 10),
+    topKeywords: trends.topKeywords.slice(0, 10),
+    regionalInterest: trends.regional,
+    peopleAlsoAsk: paa.questions,
+  });
+
+  const seoScore =
+    (searchVolume === "high" ? 70 : searchVolume === "medium" ? 45 : 20) +
+    (competition === "low" ? 25 : competition === "medium" ? 12 : 0);
+
+  const regionalBars = trends.regional.slice(0, 6).map((r) => ({
+    label: truncateRegion(r.region),
+    value: r.score,
+    color: "#22c55e",
+  }));
+
+  const regionalChart =
+    regionalBars.length > 0
+      ? generateBarChartSvg("Regional Interest", regionalBars, 560, 300)
+      : null;
+
+  const opportunityGauge = generateScoreGaugeSvg(Math.min(100, seoScore), "SEO Opportunity");
 
   const result = {
     query: { keyword, country, language },
@@ -154,7 +190,8 @@ export async function analyzeGoogleSeo(args: AnalyzeGoogleSeoInput) {
     peopleAlsoAsk: paa.questions,
     redditSignals: reddit.signals.slice(0, 8),
     wikipediaTrend: wikipedia.trend,
-    seoOpportunity: buildSeoOpportunity(searchVolume, competition),
+    seoOpportunity,
+    visualSummary: { markdown: visualMarkdown },
     relatedKeywords: relatedKeywords.slice(0, 15),
     autocompleteSuggestions: autocomplete.suggestions,
     longTailSuggestions: relatedKeywords
@@ -187,5 +224,17 @@ export async function analyzeGoogleSeo(args: AnalyzeGoogleSeoInput) {
     analyzedAt: new Date().toISOString(),
   };
 
-  return toolSuccessResult(result);
+  return toolRichResult(result, {
+    visualMarkdown,
+    images: [
+      { data: svgToBase64(opportunityGauge), mimeType: "image/svg+xml", title: "SEO Opportunity Score" },
+      ...(regionalChart
+        ? [{ data: svgToBase64(regionalChart), mimeType: "image/svg+xml", title: "Regional Interest Chart" }]
+        : []),
+    ],
+  });
+}
+
+function truncateRegion(region: string): string {
+  return region.length <= 10 ? region : `${region.slice(0, 9)}…`;
 }

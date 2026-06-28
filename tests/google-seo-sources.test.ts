@@ -139,7 +139,8 @@ describe("analyzeGoogleSeo integration shape", () => {
       language: "en",
     });
 
-    const parsed = JSON.parse(result.content[0]?.text ?? "") as {
+    const jsonBlock = result.content.find((c) => c.type === "text" && c.text.includes('"success"'));
+    const parsed = JSON.parse(jsonBlock?.text ?? "{}") as {
       success: boolean;
       data: {
         dataSources: string[];

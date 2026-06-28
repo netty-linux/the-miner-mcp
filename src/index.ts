@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import { join } from "node:path";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { env } from "./config/env.js";
@@ -36,6 +37,16 @@ function optionalAuthMiddleware(req: Request, res: Response, next: NextFunction)
 }
 
 const app = createMcpExpressApp({ host: env.host });
+const logoPath = join(process.cwd(), "logo-mcp.png");
+
+app.get("/logo-mcp.png", (_req, res) => {
+  res.type("image/png");
+  res.sendFile(logoPath, (error) => {
+    if (error && !res.headersSent) {
+      res.status(404).json({ error: "Logo not found" });
+    }
+  });
+});
 
 app.get("/health", async (_req, res) => {
   let reddit: {

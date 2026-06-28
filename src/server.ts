@@ -1,8 +1,26 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { Implementation } from "@modelcontextprotocol/sdk/types.js";
+import { env } from "./config/env.js";
 import { registerTools } from "./tools/index.js";
 
 export const SERVER_NAME = "The Miner MCP";
 export const SERVER_VERSION = "1.0.0";
+
+export const SERVER_INFO: Implementation = {
+  name: "the-miner-mcp",
+  title: "The Miner MCP",
+  version: SERVER_VERSION,
+  description:
+    "MCP especializado em mineração de ofertas e produtos em alta escala — Reddit, YouTube, Facebook, SEO e relatórios.",
+  websiteUrl: "https://github.com/netty-linux/the-miner-mcp",
+  icons: [
+    {
+      src: `${env.publicBaseUrl}/logo-mcp.png`,
+      mimeType: "image/png",
+      sizes: ["any", "256x256", "512x512"],
+    },
+  ],
+};
 
 /**
  * Creates a fresh McpServer for each stateless HTTP request.
@@ -10,10 +28,7 @@ export const SERVER_VERSION = "1.0.0";
  */
 export function createMinerServer(): McpServer {
   const server = new McpServer(
-    {
-      name: SERVER_NAME,
-      version: SERVER_VERSION,
-    },
+    SERVER_INFO,
     {
       capabilities: {
         logging: {},

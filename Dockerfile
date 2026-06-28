@@ -44,6 +44,7 @@ COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
+COPY logo-mcp.png ./logo-mcp.png
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0

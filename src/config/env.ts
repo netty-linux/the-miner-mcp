@@ -23,6 +23,13 @@ export const env = {
   redditRedirectUri: process.env.REDDIT_REDIRECT_URI ?? "http://localhost:8080",
   redditUserAgent: process.env.REDDIT_USER_AGENT,
 
+  // Public URL for MCP icons (Grok fetches logo from here)
+  publicBaseUrl:
+    process.env.PUBLIC_BASE_URL ??
+    (process.env.RAILWAY_PUBLIC_DOMAIN
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+      : `http://localhost:${process.env.PORT ?? "3000"}`),
+
   // Future auth hook
   mcpAuthToken: process.env.MCP_AUTH_TOKEN,
 } as const;

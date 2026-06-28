@@ -1,3 +1,4 @@
+<img width="1254" height="1254" alt="logo-mcp" src="https://github.com/user-attachments/assets/c9559fc4-978b-4461-b976-60268fbdcd41" />
 # The Miner MCP
 
 **The Miner MCP** (O MCP Minerador) is a production-ready Model Context Protocol server specialized in mining high-scale offers and products worldwide. It collects real metrics from multiple sources and generates intelligent reports on which products are actually selling at scale.

@@ -4,7 +4,7 @@ import {
   estimateCompetition,
   estimateSearchVolume,
   parsePeopleAlsoAsk,
-  parseRedditSearchResults,
+  mapRedditPostsToSignals,
   parseTrendsGeoMap,
   parseTrendsMultiline,
   parseTrendsRelatedQueries,
@@ -87,22 +87,16 @@ describe("google-seo-sources parsers", () => {
     assert.ok(questions.some((q) => q.includes("worth it")));
   });
 
-  it("parses Reddit search results", () => {
-    const parsed = parseRedditSearchResults({
-      data: {
-        children: [
-          {
-            data: {
-              title: "Best portable blender?",
-              score: 240,
-              num_comments: 45,
-              subreddit: "BuyItForLife",
-              permalink: "/r/BuyItForLife/comments/abc/test/",
-            },
-          },
-        ],
+  it("maps Reddit posts to demand signals", () => {
+    const parsed = mapRedditPostsToSignals([
+      {
+        title: "Best portable blender?",
+        score: 240,
+        num_comments: 45,
+        subreddit: "BuyItForLife",
+        url: "https://www.reddit.com/r/BuyItForLife/comments/abc/test/",
       },
-    });
+    ]);
     assert.equal(parsed.length, 1);
     assert.equal(parsed[0]?.subreddit, "BuyItForLife");
   });

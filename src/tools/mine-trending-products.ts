@@ -1,6 +1,11 @@
 import { z } from "zod";
-import { fetchJson, fetchText } from "../lib/http.js";
+import { fetchText } from "../lib/http.js";
 import { buildSourceStatus, type SourceStatus } from "../lib/data-availability.js";
+import {
+  getSubredditHotPosts,
+  getSubredditsForNiche,
+  isRedditApiConfigured,
+} from "../lib/reddit-client.js";
 import { logger } from "../lib/logger.js";
 import { toolSuccessResult } from "../lib/errors.js";
 
@@ -166,34 +171,23 @@ async function fetchGoogleTrendsRss(geo: string, niche: string): Promise<{
 }
 
 async function fetchRedditSubreddit(sub: string, niche: string): Promise<TrendingProduct[]> {
-  const bases = ["https://www.reddit.com", "https://old.reddit.com"];
-  for (const base of bases) {
-    try {
-      const url = `${base}/r/${sub}/hot.json?limit=15`;
-      const data = await fetchJson<{
-        data?: { children?: Array<{ data: { title: string; score: number; num_comments: number } }> };
-      }>(url, { browserLike: true, headers: { Accept: "application/json" }, timeoutMs: 8_000 });
+  const { posts } = await getSubredditHotPosts(sub, 15);
+  const products: TrendingProduct[] = [];
 
-      const products: TrendingProduct[] = [];
-      for (const post of data.data?.children ?? []) {
-        const { title, score, num_comments } = post.data;
-        if (score < 100) continue;
-        products.push({
-          name: title.slice(0, 120),
-          niche,
-          trendScore: Math.min(100, Math.round(score / 15 + num_comments / 2)),
-          signals: [`reddit upvotes: ${score}`, `comments: ${num_comments}`],
-          source: `reddit/r/${sub}`,
-          estimatedMomentum: score > 500 ? "rising" : "stable",
-          rawMetrics: { upvotes: score, comments: num_comments },
-        });
-      }
-      if (products.length > 0) return products;
-    } catch (error) {
-      logger.warn("Reddit fetch failed", { sub, base, error: String(error) });
-    }
+  for (const post of posts) {
+    if (post.score < 100) continue;
+    products.push({
+      name: post.title.slice(0, 120),
+      niche,
+      trendScore: Math.min(100, Math.round(post.score / 15 + post.num_comments / 2)),
+      signals: [`reddit upvotes: ${post.score}`, `comments: ${post.num_comments}`],
+      source: `reddit/r/${sub}`,
+      estimatedMomentum: post.score > 500 ? "rising" : "stable",
+      rawMetrics: { upvotes: post.score, comments: post.num_comments },
+    });
   }
-  return [];
+
+  return products;
 }
 
 async function fetchRedditTrending(niche: string): Promise<{
@@ -207,9 +201,14 @@ async function fetchRedditTrending(niche: string): Promise<{
   return {
     products,
     status: buildSourceStatus(
-      "reddit",
+      isRedditApiConfigured() ? "reddit_api" : "reddit",
       products.length,
-      products.length === 0 ? "Reddit blocked (403) or no high-engagement posts" : undefined,
+      products.length === 0
+        ? isRedditApiConfigured()
+          ? "Reddit API returned no high-engagement posts"
+          : "Reddit blocked (403) — configure REDDIT_CLIENT_ID/SECRET/USERNAME/PASSWORD"
+        : undefined,
+      isRedditApiConfigured() ? "Reddit Data API (OAuth)" : undefined,
     ),
   };
 }
@@ -245,19 +244,6 @@ async function fetchGoogleAutocomplete(niche: string): Promise<{
       status: buildSourceStatus("google_autocomplete", 0, String(error)),
     };
   }
-}
-
-function getSubredditsForNiche(niche: string): string[] {
-  const map: Record<string, string[]> = {
-    fitness: ["Fitness", "bodyweightfitness", "loseit"],
-    beauty: ["SkincareAddiction", "MakeupAddiction", "beauty"],
-    pets: ["dogs", "cats", "Pets"],
-    tech: ["gadgets", "technology", "BuyItForLife"],
-    health: ["Supplements", "Nootropics", "Health"],
-    home: ["HomeImprovement", "InteriorDesign", "organization"],
-  };
-  const key = niche.toLowerCase();
-  return map[key] ?? ["Entrepreneur", "ecommerce", "dropship"];
 }
 
 function scalingDataAvailability(trendingCount: number, sources: SourceStatus[]): string {

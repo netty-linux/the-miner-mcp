@@ -2,6 +2,7 @@ import * as cheerio from "cheerio";
 import { fetchJson, fetchText } from "./http.js";
 import { buildSourceStatus, type SourceStatus } from "./data-availability.js";
 import { logger } from "./logger.js";
+import { isRedditApiConfigured, searchRedditPosts } from "./reddit-client.js";
 
 export interface RelatedKeyword {
   keyword: string;
@@ -155,16 +156,22 @@ export function parsePeopleAlsoAsk(html: string): string[] {
   return [...questions].slice(0, 12);
 }
 
-export function parseRedditSearchResults(data: {
-  data?: { children?: Array<{ data: { title: string; score: number; num_comments: number; subreddit: string; permalink: string } }> };
-}): RedditSignal[] {
-  return (data.data?.children ?? [])
-    .map((child) => ({
-      title: child.data.title,
-      score: child.data.score,
-      comments: child.data.num_comments,
-      subreddit: child.data.subreddit,
-      url: `https://www.reddit.com${child.data.permalink}`,
+export function mapRedditPostsToSignals(
+  posts: Array<{
+    title: string;
+    score: number;
+    num_comments: number;
+    subreddit: string;
+    url: string;
+  }>,
+): RedditSignal[] {
+  return posts
+    .map((post) => ({
+      title: post.title,
+      score: post.score,
+      comments: post.num_comments,
+      subreddit: post.subreddit,
+      url: post.url,
     }))
     .filter((p) => p.score >= 10)
     .slice(0, 10);
@@ -441,27 +448,34 @@ export async function fetchPeopleAlsoAsk(
 export async function fetchRedditKeywordSignals(keyword: string): Promise<{
   signals: RedditSignal[];
   status: SourceStatus;
+  via: "oauth" | "public" | "none";
 }> {
-  const bases = ["https://www.reddit.com", "https://old.reddit.com"];
-  for (const base of bases) {
-    try {
-      const url = `${base}/search.json?q=${encodeURIComponent(keyword)}&sort=relevance&limit=12`;
-      const data = await fetchJson<Parameters<typeof parseRedditSearchResults>[0]>(url, {
-        browserLike: true,
-        headers: { Accept: "application/json" },
-        timeoutMs: 8_000,
-      });
-      const signals = parseRedditSearchResults(data);
-      if (signals.length > 0) {
-        return { signals, status: buildSourceStatus("reddit_search", signals.length) };
-      }
-    } catch (error) {
-      logger.warn("Reddit keyword search failed", { base, error: String(error) });
-    }
+  const { posts, via } = await searchRedditPosts(keyword, 12);
+  const signals = mapRedditPostsToSignals(posts);
+
+  if (signals.length > 0) {
+    return {
+      signals,
+      via,
+      status: buildSourceStatus(
+        via === "oauth" ? "reddit_api" : "reddit_search",
+        signals.length,
+        undefined,
+        via === "oauth" ? "Reddit Data API (OAuth)" : "Reddit public JSON",
+      ),
+    };
   }
+
   return {
     signals: [],
-    status: buildSourceStatus("reddit_search", 0, "Reddit blocked (403) or no relevant posts"),
+    via: "none",
+    status: buildSourceStatus(
+      isRedditApiConfigured() ? "reddit_api" : "reddit_search",
+      0,
+      isRedditApiConfigured()
+        ? "Reddit API returned no posts for keyword"
+        : "Configure REDDIT_CLIENT_ID/SECRET/USERNAME/PASSWORD or Reddit blocked (403)",
+    ),
   };
 }
 

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { env } from "../config/env.js";
 import { fetchJson } from "../lib/http.js";
 import { buildSourceStatus, overallAvailability } from "../lib/data-availability.js";
+import { isRedditApiConfigured } from "../lib/reddit-client.js";
 import {
   buildSeoOpportunity,
   estimateCompetition,
@@ -109,7 +110,7 @@ export async function analyzeGoogleSeo(args: AnalyzeGoogleSeoInput) {
     "google_trends",
     "google_autocomplete",
     "people_also_ask",
-    "reddit_search",
+    reddit.via === "oauth" ? "reddit_api" : "reddit_search",
     "wikipedia_pageviews",
   ];
 
@@ -140,6 +141,8 @@ export async function analyzeGoogleSeo(args: AnalyzeGoogleSeoInput) {
     apiKeysUsed: {
       serpApi: Boolean(env.serpApiKey),
       googleApi: Boolean(env.googleApiKey),
+      redditApi: isRedditApiConfigured(),
+      redditVia: reddit.via,
       stack: "free_multi_source",
     },
     searchVolume,
@@ -166,8 +169,10 @@ export async function analyzeGoogleSeo(args: AnalyzeGoogleSeoInput) {
         ? `Answer PAA questions in content: "${paa.questions.slice(0, 2).join('", "')}"`
         : "Create FAQ content around buyer-intent questions for this keyword.",
       reddit.signals.length > 0
-        ? `Reddit demand signal: avg ${redditAvgScore} upvotes across ${reddit.signals.length} relevant posts.`
-        : "No strong Reddit threads found — validate demand via Facebook/YouTube tools.",
+        ? `Reddit demand signal (${reddit.via}): avg ${redditAvgScore} upvotes across ${reddit.signals.length} relevant posts.`
+        : isRedditApiConfigured()
+          ? "Reddit API configured but no strong threads found for this keyword."
+          : "No strong Reddit threads — set REDDIT_CLIENT_ID/SECRET/USERNAME/PASSWORD for reliable API access.",
       trends.regional.length > 0
         ? `Top regional interest: ${trends.regional
             .slice(0, 3)

@@ -14,13 +14,25 @@ export const env = {
   googleApiKey: process.env.GOOGLE_API_KEY,
   serpApiKey: process.env.SERP_API_KEY,
 
+  // Reddit Data API (OAuth script app — not Devvit RedditAPIClient)
+  redditClientId: process.env.REDDIT_CLIENT_ID,
+  redditClientSecret: process.env.REDDIT_CLIENT_SECRET,
+  redditUsername: process.env.REDDIT_USERNAME,
+  redditPassword: process.env.REDDIT_PASSWORD,
+  redditUserAgent: process.env.REDDIT_USER_AGENT,
+
   // Future auth hook
   mcpAuthToken: process.env.MCP_AUTH_TOKEN,
 } as const;
 
 export function hasApiKey(key: keyof Pick<
   typeof env,
-  "youtubeApiKey" | "facebookAccessToken" | "tiktokAccessToken" | "googleApiKey" | "serpApiKey"
+  | "youtubeApiKey"
+  | "facebookAccessToken"
+  | "tiktokAccessToken"
+  | "googleApiKey"
+  | "serpApiKey"
+  | "redditClientId"
 >): boolean {
   return Boolean(env[key]);
 }

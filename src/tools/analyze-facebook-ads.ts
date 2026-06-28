@@ -13,6 +13,11 @@ export const analyzeFacebookAdsSchema = z.object({
   product_name: z.string().optional().describe("Product name to search in Ad Library"),
   keyword: z.string().optional().describe("Keyword to search in Facebook Ad Library"),
   country: z.string().default("US").describe("ISO country code for ad search"),
+  skip_puppeteer: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("Skip Puppeteer fallback (faster; use in orchestrated calls)"),
 });
 
 export type AnalyzeFacebookAdsInput = z.infer<typeof analyzeFacebookAdsSchema>;
@@ -64,6 +69,7 @@ function mapParsedAds(parsed: ReturnType<typeof parseFacebookAdLibraryHtml>): Fa
 async function searchViaPublicLibrary(
   searchTerm: string,
   country: string,
+  skipPuppeteer = false,
 ): Promise<{ ads: FacebookAd[]; status: ReturnType<typeof buildSourceStatus> }> {
   const url = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&q=${encodeURIComponent(searchTerm)}&search_type=keyword_unordered&media_type=all`;
 
@@ -78,6 +84,17 @@ async function searchViaPublicLibrary(
     }
   } catch (error) {
     logger.warn("Facebook Ad Library HTTP scrape failed", { error: String(error) });
+  }
+
+  if (skipPuppeteer) {
+    return {
+      ads: [],
+      status: buildSourceStatus(
+        "facebook_ad_library",
+        0,
+        "HTTP scrape failed — Puppeteer skipped (fast mode)",
+      ),
+    };
   }
 
   try {
@@ -126,7 +143,7 @@ export async function analyzeFacebookAds(args: AnalyzeFacebookAdsInput) {
   }
 
   if (ads.length === 0) {
-    const scraped = await searchViaPublicLibrary(searchTerm, country);
+    const scraped = await searchViaPublicLibrary(searchTerm, country, args.skip_puppeteer);
     if (scraped.ads.length > 0) {
       ads = scraped.ads;
       sourceStatus = scraped.status;

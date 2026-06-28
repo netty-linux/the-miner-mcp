@@ -35,6 +35,10 @@ import {
   generateMiningReportSchema,
   generateMiningReport,
 } from "./generate-mining-report.js";
+import {
+  analyzeNicheFullSchema,
+  analyzeNicheFull,
+} from "./analyze-niche-full.js";
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<ReturnType<typeof toolErrorResult>>;
 
@@ -59,6 +63,18 @@ async function safeHandler<S extends z.ZodTypeAny>(
  * Extension point: add new tools here following the same pattern.
  */
 export function registerTools(server: McpServer): void {
+  server.registerTool(
+    "analyze_niche_full",
+    {
+      title: "Analyze Niche Full (One-Shot Report)",
+      description:
+        "PREFERRED for complete niche reports. Runs all channels in parallel (trending, Facebook, YouTube, SEO, TikTok) and returns a single rich visual report with charts — one MCP call instead of 6+. Use when user asks for 'relatório completo', 'full report', or niche analysis.",
+      inputSchema: analyzeNicheFullSchema.shape,
+    },
+    async (args) =>
+      safeHandler("analyze_niche_full", analyzeNicheFullSchema, analyzeNicheFull as ToolHandler, args),
+  );
+
   server.registerTool(
     "mine_trending_products",
     {

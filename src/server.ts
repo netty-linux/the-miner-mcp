@@ -11,7 +11,7 @@ export const SERVER_INFO: Implementation = {
   title: "The Miner MCP",
   version: SERVER_VERSION,
   description:
-    "MCP especializado em mineração de ofertas e produtos em alta escala — Reddit, YouTube, Facebook, SEO e relatórios.",
+    "MCP de mineração de ofertas. Para relatórios completos use analyze_niche_full (1 chamada). Tools individuais: trending, Facebook, YouTube, SEO, TikTok, landing page, competitor.",
   websiteUrl: "https://github.com/netty-linux/the-miner-mcp",
   icons: buildServerIcons(),
 };

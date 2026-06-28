@@ -38,10 +38,17 @@ describe("reddit-client", () => {
     assert.ok(subs.includes("Fitness"));
   });
 
-  it("reports unconfigured Reddit API without env vars", () => {
+  it("reports unconfigured Reddit API without env vars", { skip: isRedditApiConfigured() }, () => {
     assert.equal(isRedditApiConfigured(), false);
     assert.equal(isRedditRefreshConfigured(), false);
     assert.equal(isRedditPasswordConfigured(), false);
+    assert.match(getRedditUserAgent(), /TheMinerMCP/);
+  });
+
+  it("exposes Reddit configuration state and user agent", () => {
+    assert.equal(typeof isRedditApiConfigured(), "boolean");
+    assert.equal(typeof isRedditRefreshConfigured(), "boolean");
+    assert.equal(typeof isRedditPasswordConfigured(), "boolean");
     assert.match(getRedditUserAgent(), /TheMinerMCP/);
   });
 });

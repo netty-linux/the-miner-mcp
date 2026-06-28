@@ -9,6 +9,14 @@ export interface MiningDataInput {
   googleSeo?: { searchVolume?: string; competition?: string; relatedKeywords?: string[]; dataAvailability?: string };
   landingPage?: { triggers?: string[]; ctaButtons?: string[]; prices?: string[] };
   competitorData?: { funnelSteps?: string[]; pricing?: string[] };
+  marketplace?: {
+    mercadoLivreTotal?: number;
+    shopeeTotal?: number;
+    combinedDemandScore?: number;
+    supplierAvailabilityScore?: number;
+    marketplaceSaturation?: string;
+    avgPrice?: number | null;
+  };
   customNotes?: string;
 }
 
@@ -45,6 +53,7 @@ function countEvidenceChannels(input: MiningDataInput): number {
   if (input.googleSeo?.searchVolume && input.googleSeo.searchVolume !== "unknown") count++;
   if ((input.landingPage?.triggers?.length ?? 0) >= 2) count++;
   if ((input.competitorData?.funnelSteps?.length ?? 0) >= 2) count++;
+  if ((input.marketplace?.combinedDemandScore ?? 0) >= 30) count++;
   return count;
 }
 
@@ -105,6 +114,13 @@ export function synthesizeMiningReport(input: MiningDataInput): MiningReport {
     const steps = input.competitorData.funnelSteps.length;
     breakdown.competitor = clamp(steps * 1.5, 0, 8);
     if (steps >= 3) signals.push("competitor scaling");
+  }
+
+  if (input.marketplace?.combinedDemandScore) {
+    const mp = input.marketplace.combinedDemandScore;
+    breakdown.marketplace = clamp(Math.round(mp * 0.12), 0, 12);
+    if (mp >= 60) signals.push("marketplace demand verified");
+    if ((input.marketplace.supplierAvailabilityScore ?? 0) >= 50) signals.push("supplier availability");
   }
 
   const dedupedSignals = uniqueSignals(signals);
@@ -199,7 +215,7 @@ export function synthesizeMiningReport(input: MiningDataInput): MiningReport {
     scoreBreakdown: breakdown,
     dataQuality: {
       channelsWithEvidence: evidenceChannels,
-      channelsTotal: 7,
+      channelsTotal: 8,
       confidence,
       disclaimer,
     },

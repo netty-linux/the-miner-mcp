@@ -82,6 +82,8 @@ export function buildStrategicIntelligenceMarkdown(
     dimLine("Meta Competition (inverso)", intel.dimensions.metaCompetition),
     dimLine("TikTok Growth", intel.dimensions.tiktokGrowth),
     dimLine("YouTube Demand", intel.dimensions.youtubeDemand),
+    dimLine("Marketplace Demand", intel.dimensions.marketplaceDemand),
+    dimLine("Supplier Availability", intel.dimensions.supplierAvailability),
     dimLine("Landing Quality", intel.dimensions.landingQuality),
     dimLine("Market Maturity", intel.dimensions.marketMaturity),
     dimLine("Escalabilidade", intel.dimensions.scalability),
@@ -116,6 +118,12 @@ export function buildStrategicIntelligenceMarkdown(
     input.googleSeo
       ? `- Volume: ${input.googleSeo.searchVolume}\n- Competição: ${input.googleSeo.competition}\n- Keywords: ${input.googleSeo.relatedKeywords?.slice(0, 3).join(", ") ?? "—"}`
       : "❌ SEO/Google Trends indisponível",
+    "",
+    "## Análise Marketplaces",
+    "",
+    input.marketplace
+      ? `- Mercado Livre: ${input.marketplace.mercadoLivreTotal ?? 0} listings\n- Shopee: ${input.marketplace.shopeeTotal ?? 0} listings\n- Demand Score: ${input.marketplace.combinedDemandScore}/100\n- Supplier Score: ${input.marketplace.supplierAvailabilityScore}/100\n- Saturação: ${input.marketplace.marketplaceSaturation}`
+      : "❌ Marketplaces indisponíveis",
     "",
     "## Análise YouTube",
     "",

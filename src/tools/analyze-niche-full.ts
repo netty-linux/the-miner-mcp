@@ -12,6 +12,7 @@ import { analyzeFacebookAds } from "./analyze-facebook-ads.js";
 import { analyzeYoutubeTrends } from "./analyze-youtube-trends.js";
 import { analyzeGoogleSeo } from "./analyze-google-seo.js";
 import { analyzeTiktokCreatives } from "./analyze-tiktok-creatives.js";
+import { analyzeMarketplaceDemand } from "./analyze-marketplace-demand.js";
 
 export const analyzeNicheFullSchema = z.object({
   niche: z.string().describe("Niche or market to analyze (e.g. emagrecimento, fitness)"),
@@ -66,6 +67,15 @@ interface TiktokData {
   scalingSignal: string;
 }
 
+interface MarketplaceData {
+  combinedDemandScore: number;
+  supplierAvailabilityScore: number;
+  marketplaceSaturation: string;
+  mercadoLivre: { totalResults: number; avgPrice: number | null; avgSold: number | null } | null;
+  shopee: { totalResults: number; avgPrice: number | null; avgSold: number | null } | null;
+  dataAvailability?: string;
+}
+
 function defaultLanguage(country: string): string {
   const map: Record<string, string> = { BR: "pt", PT: "pt", US: "en", UK: "en", ES: "es", MX: "es" };
   return map[country.toUpperCase()] ?? "en";
@@ -98,7 +108,7 @@ export async function analyzeNicheFull(args: AnalyzeNicheFullInput) {
     }
   }
 
-  const [trending, facebook, youtube, seo, tiktok] = await Promise.all([
+  const [trending, facebook, youtube, seo, tiktok, marketplace] = await Promise.all([
     runChannel<TrendingData>(
       "Trending",
       () => mineTrendingProducts({ niche, country, time_period }),
@@ -123,6 +133,11 @@ export async function analyzeNicheFull(args: AnalyzeNicheFullInput) {
       "TikTok",
       () => analyzeTiktokCreatives({ keyword: niche, country }),
       (d) => `${d.totalFound} criativos`,
+    ),
+    runChannel<MarketplaceData>(
+      "Marketplace",
+      () => analyzeMarketplaceDemand({ keyword: niche, country }),
+      (d) => `ML+Shopee demand ${d.combinedDemandScore}`,
     ),
   ]);
 
@@ -152,6 +167,16 @@ export async function analyzeNicheFull(args: AnalyzeNicheFullInput) {
     tiktok_creatives: tiktok
       ? { totalFound: tiktok.totalFound, topHooks: tiktok.topHooks, avgEngagement: tiktok.avgLikes ?? undefined }
       : undefined,
+    marketplace: marketplace
+      ? {
+          mercadoLivreTotal: marketplace.mercadoLivre?.totalResults,
+          shopeeTotal: marketplace.shopee?.totalResults,
+          combinedDemandScore: marketplace.combinedDemandScore,
+          supplierAvailabilityScore: marketplace.supplierAvailabilityScore,
+          marketplaceSaturation: marketplace.marketplaceSaturation,
+          avgPrice: marketplace.mercadoLivre?.avgPrice ?? marketplace.shopee?.avgPrice ?? null,
+        }
+      : undefined,
   };
 
   const input: MiningDataInput = {
@@ -162,6 +187,7 @@ export async function analyzeNicheFull(args: AnalyzeNicheFullInput) {
     tiktokCreatives: collected_data.tiktok_creatives,
     youtubeTrends: collected_data.youtube_trends,
     googleSeo: collected_data.google_seo,
+    marketplace: collected_data.marketplace,
   };
 
   const report = synthesizeMiningReport(input);
@@ -176,6 +202,12 @@ export async function analyzeNicheFull(args: AnalyzeNicheFullInput) {
     youtube: { ok: youtube !== null && (youtube.totalVideos ?? 0) > 0, detail: youtube?.scalingSignal },
     seo: { ok: seo !== null, detail: seo ? `${seo.searchVolume}/${seo.competition}` : undefined },
     tiktok: { ok: tiktok !== null, detail: tiktok?.scalingSignal },
+    marketplace: {
+      ok: marketplace !== null && marketplace.dataAvailability !== "unavailable",
+      detail: marketplace
+        ? `ML ${marketplace.mercadoLivre?.totalResults ?? 0} / Shopee ${marketplace.shopee?.totalResults ?? 0}`
+        : undefined,
+    },
   };
 
   const intelligence = buildStrategicIntelligence(report, input, channelMeta);

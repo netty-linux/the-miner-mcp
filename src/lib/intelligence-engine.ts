@@ -20,10 +20,28 @@ export interface DimensionScores {
   metaCompetition: number | null;
   tiktokGrowth: number | null;
   youtubeDemand: number | null;
+  marketplaceDemand: number | null;
+  supplierAvailability: number | null;
   landingQuality: number | null;
   marketMaturity: number | null;
   scalability: number | null;
 }
+
+/** Pesos refinados para Opportunity Score dimensional */
+const DIMENSION_WEIGHTS: Partial<Record<keyof DimensionScores, number>> = {
+  trendScore: 0.07,
+  competitionScore: 0.11,
+  creativeSaturation: 0.09,
+  seoOpportunity: 0.11,
+  metaCompetition: 0.09,
+  tiktokGrowth: 0.06,
+  youtubeDemand: 0.07,
+  marketplaceDemand: 0.11,
+  supplierAvailability: 0.07,
+  scalability: 0.09,
+  landingQuality: 0.04,
+  marketMaturity: 0.07,
+};
 
 export interface SaturationAnalysis {
   activeAdvertisers: number;
@@ -94,6 +112,7 @@ export interface ChannelCollectionMeta {
   youtube?: { ok: boolean; detail?: string };
   seo?: { ok: boolean; detail?: string };
   tiktok?: { ok: boolean; detail?: string };
+  marketplace?: { ok: boolean; detail?: string };
   landing?: { ok: boolean; detail?: string };
   competitor?: { ok: boolean; detail?: string };
 }
@@ -182,27 +201,51 @@ function buildSourceEvidence(input: MiningDataInput, meta: ChannelCollectionMeta
       detail: meta.competitor?.detail ?? "Forneça URL via scrape_competitor_data",
     },
     {
+      name: "Mercado Livre",
+      weight: 8,
+      available: meta.marketplace?.ok === true && (input.marketplace?.mercadoLivreTotal ?? 0) > 0,
+      status: meta.marketplace?.ok
+        ? (input.marketplace?.mercadoLivreTotal ? "ok" : "partial")
+        : "failed",
+      detail: input.marketplace?.mercadoLivreTotal
+        ? `${input.marketplace.mercadoLivreTotal} listings ML`
+        : meta.marketplace?.detail,
+    },
+    {
       name: "Shopee",
-      weight: 4,
-      available: false,
-      status: "not_integrated",
-      detail: "API não integrada nesta versão",
+      weight: 7,
+      available: meta.marketplace?.ok === true && (input.marketplace?.shopeeTotal ?? 0) > 0,
+      status: meta.marketplace?.ok
+        ? (input.marketplace?.shopeeTotal ? "ok" : "partial")
+        : "failed",
+      detail: input.marketplace?.shopeeTotal
+        ? `${input.marketplace.shopeeTotal} listings Shopee`
+        : "API frequentemente bloqueada em datacenter",
     },
     {
       name: "AliExpress",
-      weight: 3,
+      weight: 2,
       available: false,
       status: "not_integrated",
-      detail: "API não integrada nesta versão",
-    },
-    {
-      name: "Mercado Livre",
-      weight: 3,
-      available: false,
-      status: "not_integrated",
-      detail: "API não integrada nesta versão",
+      detail: "Próxima versão",
     },
   ];
+}
+
+function computeWeightedOpportunityScore(dimensions: DimensionScores, baseScore: number): number {
+  let weightedSum = 0;
+  let totalWeight = 0;
+
+  for (const [key, weight] of Object.entries(DIMENSION_WEIGHTS)) {
+    const value = dimensions[key as keyof DimensionScores];
+    if (value !== null && value !== undefined) {
+      weightedSum += value * weight;
+      totalWeight += weight;
+    }
+  }
+
+  const dimensional = totalWeight > 0 ? clamp(weightedSum / totalWeight) : baseScore;
+  return clamp(Math.round(baseScore * 0.35 + dimensional * 0.65));
 }
 
 function computeConfidence(sources: SourceEvidence[]): ConfidenceReport {
@@ -277,6 +320,9 @@ function computeDimensions(input: MiningDataInput, saturation: SaturationAnalysi
   const scalability =
     metaAds >= 5 && (ytViews ?? 0) > 100_000 ? 75 : metaAds >= 3 || (ytViews ?? 0) > 50_000 ? 55 : 30;
 
+  const mpDemand = input.marketplace?.combinedDemandScore ?? null;
+  const supplierAvail = input.marketplace?.supplierAvailabilityScore ?? null;
+
   return {
     trendScore: trendAvg !== null ? clamp(trendAvg) : null,
     competitionScore,
@@ -285,6 +331,8 @@ function computeDimensions(input: MiningDataInput, saturation: SaturationAnalysi
     metaCompetition: metaComp,
     tiktokGrowth,
     youtubeDemand,
+    marketplaceDemand: mpDemand !== null ? clamp(mpDemand) : null,
+    supplierAvailability: supplierAvail !== null ? clamp(supplierAvail) : null,
     landingQuality,
     marketMaturity,
     scalability: clamp(scalability),
@@ -332,6 +380,9 @@ function analyzeGaps(input: MiningDataInput, saturation: SaturationAnalysis): Ga
   }
   if (input.youtubeTrends?.topTitles?.length) {
     whatEveryoneDoes.push(`Formato YouTube comum: títulos estilo "${input.youtubeTrends.topTitles[0]?.slice(0, 50)}"`);
+  }
+  if ((input.marketplace?.mercadoLivreTotal ?? 0) > 500) {
+    whatEveryoneDoes.push(`Mercado Livre saturado com ${input.marketplace!.mercadoLivreTotal}+ listings`);
   }
 
   if (saturation.creativeFatigue === "High") {
@@ -398,13 +449,17 @@ function buildStrategy(input: MiningDataInput, gaps: GapAnalysis): StrategyPlan 
   const niche = input.productName ?? input.niche ?? "oferta";
   const hook = input.tiktokCreatives?.topHooks?.[0] ?? `Descubra como ${niche} pode mudar seu resultado em 30 dias`;
   const country = input.country ?? "BR";
+  const avgMp = input.marketplace?.avgPrice;
+  const priceRange = avgMp
+    ? `R$ ${Math.max(10, Math.round(avgMp * 0.7))} – R$ ${Math.round(avgMp * 1.4)} (base marketplace R$ ${avgMp})`
+    : "R$ 97 – R$ 197 (low ticket) ou R$ 27 – R$ 47 (impulso físico)";
 
   return {
     recommendedAudience: `Adultos 25-45 interessados em ${niche}, ${country}, compradores online`,
     recommendedHook: hook.slice(0, 120),
     recommendedHeadline: `${niche}: o método que poucos anunciantes estão usando`,
     suggestedOffer: "Oferta principal + garantia 30 dias + bônus digital",
-    suggestedPriceRange: "R$ 97 – R$ 197 (low ticket) ou R$ 27 – R$ 47 (impulso físico)",
+    suggestedPriceRange: priceRange,
     idealTestBudget: "R$ 150 – R$ 300/dia por 5-7 dias para validar CPA",
     idealCpaRange: "30-45% do preço de venda (break-even em 2-3 vendas/dia)",
     recommendedCreativeFormat: gaps.differentiationOpportunities[0]?.includes("UGC") ? "UGC 15-30s com pattern interrupt" : "Demonstração / antes-depois 20-40s",
@@ -460,7 +515,7 @@ export function buildStrategicIntelligence(
   const strategy = buildStrategy(input, gaps);
   const risk = buildRisk(input, saturation, confidence);
 
-  const opportunityScore = baseReport.opportunityScore;
+  const opportunityScore = computeWeightedOpportunityScore(dimensions, baseReport.opportunityScore);
   const { recommendation, reasons } = deriveRecommendation(opportunityScore, confidence.score, saturation);
 
   const strengths: string[] = [];
@@ -479,6 +534,12 @@ export function buildStrategicIntelligence(
   }
   if (saturation.creativeFatigue === "Low") {
     strengths.push("Baixa saturação de criativos — espaço para novos ângulos");
+  }
+  if ((input.marketplace?.combinedDemandScore ?? 0) >= 50) {
+    strengths.push(`Demanda marketplace verificada (score ${input.marketplace!.combinedDemandScore}/100)`);
+  }
+  if ((input.marketplace?.supplierAvailabilityScore ?? 0) >= 50) {
+    strengths.push("Fornecedores disponíveis em marketplaces — viável para dropshipping");
   }
 
   if (confidence.score < 60) weaknesses.push(`Confidence limitado (${confidence.score}/100) por falhas de fonte`);

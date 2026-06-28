@@ -1,5 +1,5 @@
 /**
- * MCP verification script — exercises initialize, listTools, and all 8 tools
+ * MCP verification script — exercises initialize, listTools, and all tools
  * against a running The Miner MCP server instance.
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -13,6 +13,9 @@ const BASE_URL = process.env.MCP_URL ?? "http://127.0.0.1:3000";
 const MCP_ENDPOINT = `${BASE_URL}/mcp`;
 
 const EXPECTED_TOOLS = [
+  "generate_full_niche_report",
+  "analyze_niche_full",
+  "analyze_marketplace_demand",
   "mine_trending_products",
   "analyze_facebook_ads",
   "analyze_tiktok_creatives",
@@ -24,6 +27,7 @@ const EXPECTED_TOOLS = [
 ];
 
 const TOOL_CALLS: Array<{ tool: string; args: Record<string, unknown> }> = [
+  { tool: "analyze_marketplace_demand", args: { keyword: "fone bluetooth", country: "BR" } },
   { tool: "mine_trending_products", args: { niche: "fitness", country: "US", time_period: "last_7_days" } },
   { tool: "analyze_facebook_ads", args: { keyword: "fitness", country: "US" } },
   { tool: "analyze_tiktok_creatives", args: { keyword: "fitness tracker", country: "US" } },
@@ -162,7 +166,7 @@ async function main(): Promise<void> {
   );
 
   await client.close();
-  console.log(`Verification complete — all 8 tools OK (puppeteer on ${JS_HEAVY_REFERENCE_URL})`);
+  console.log(`Verification complete — all ${EXPECTED_TOOLS.length} tools OK (puppeteer on ${JS_HEAVY_REFERENCE_URL})`);
 }
 
 function metaField(data: Record<string, unknown>, field: string): unknown {

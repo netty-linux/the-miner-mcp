@@ -39,6 +39,10 @@ import {
   analyzeNicheFullSchema,
   analyzeNicheFull,
 } from "./analyze-niche-full.js";
+import {
+  analyzeMarketplaceDemandSchema,
+  analyzeMarketplaceDemand,
+} from "./analyze-marketplace-demand.js";
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<ReturnType<typeof toolErrorResult>>;
 
@@ -66,7 +70,7 @@ export function registerTools(server: McpServer): void {
   const nicheFullConfig = {
     title: "THE MINER — Relatório Estratégico Completo",
     description:
-      "★ PRINCIPAL ★ Inteligência estratégica em 1 chamada: Opportunity Score, Confidence Score (com fontes que falharam), saturação/creative fatigue, gaps, estratégia, risco, recomendação ENTRAR|TESTAR|AGUARDAR|EVITAR. Orquestra Meta+TikTok+Google+YouTube+Trending. Nunca inventa dados. NÃO use tools individuais para relatório completo.",
+      "★ PRINCIPAL ★ Inteligência estratégica em 1 chamada: Opportunity Score ponderado, Confidence Score, Mercado Livre+Shopee, Meta, TikTok, Google, YouTube, Trending. Recomendação ENTRAR|TESTAR|AGUARDAR|EVITAR. NÃO use tools individuais para relatório completo.",
     inputSchema: analyzeNicheFullSchema.shape,
   };
 
@@ -76,6 +80,18 @@ export function registerTools(server: McpServer): void {
 
   server.registerTool("analyze_niche_full", nicheFullConfig, async (args) =>
     safeHandler("analyze_niche_full", analyzeNicheFullSchema, analyzeNicheFull as ToolHandler, args),
+  );
+
+  server.registerTool(
+    "analyze_marketplace_demand",
+    {
+      title: "Analyze Marketplace Demand",
+      description:
+        "Search Mercado Livre (API) and Shopee for marketplace demand, supplier availability, saturation, avg price/sales. Visual markdown + JSON.",
+      inputSchema: analyzeMarketplaceDemandSchema.shape,
+    },
+    async (args) =>
+      safeHandler("analyze_marketplace_demand", analyzeMarketplaceDemandSchema, analyzeMarketplaceDemand as ToolHandler, args),
   );
 
   server.registerTool(

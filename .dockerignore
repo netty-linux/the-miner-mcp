@@ -1,0 +1,14 @@
+node_modules
+dist
+.env
+.env.local
+.git
+.gitignore
+*.log
+coverage
+tests
+scripts
+mcps
+terminals
+README.md
+.DS_Store

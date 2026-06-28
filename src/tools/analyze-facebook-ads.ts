@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { env } from "../config/env.js";
-import { fetchJson, fetchText } from "../lib/http.js";
+import { fetchText } from "../lib/http.js";
+import { searchFacebookAdsArchive } from "../lib/facebook-api.js";
 import { parseFacebookAdLibraryHtml } from "../lib/facebook-ad-parser.js";
+import { fetchHtml } from "../lib/scraping.js";
 import { buildSourceStatus } from "../lib/data-availability.js";
 import { logger } from "../lib/logger.js";
 import { toolSuccessResult } from "../lib/errors.js";
@@ -35,72 +37,70 @@ async function searchViaGraphApi(
     };
   }
 
-  try {
-    const url = new URL("https://graph.facebook.com/v21.0/ads_archive");
-    url.searchParams.set("access_token", token);
-    url.searchParams.set("search_terms", searchTerm);
-    url.searchParams.set("ad_reached_countries", country);
-    url.searchParams.set("ad_active_status", "ACTIVE");
-    url.searchParams.set(
-      "fields",
-      "id,ad_creative_bodies,page_name,ad_delivery_start_time,publisher_platforms",
-    );
-    url.searchParams.set("limit", "25");
+  const result = await searchFacebookAdsArchive(searchTerm, country, token);
+  return {
+    ads: result.ads,
+    status: buildSourceStatus(
+      "facebook_graph_api",
+      result.ads.length,
+      result.error,
+      result.ads.length > 0 ? "Facebook Ad Library API" : undefined,
+    ),
+  };
+}
 
-    const data = await fetchJson<{
-      data?: Array<{
-        id: string;
-        page_name?: string;
-        ad_creative_bodies?: string[];
-        ad_delivery_start_time?: string;
-        publisher_platforms?: string[];
-      }>;
-    }>(url.toString());
-
-    const ads = (data.data ?? []).map((ad) => ({
-      id: ad.id,
-      pageName: ad.page_name ?? "Unknown",
-      adCreativeBody: (ad.ad_creative_bodies ?? []).join(" ").slice(0, 500),
-      adDeliveryStartTime: ad.ad_delivery_start_time,
-      platforms: ad.publisher_platforms ?? [],
-      isActive: true,
-    }));
-
-    return { ads, status: buildSourceStatus("facebook_graph_api", ads.length) };
-  } catch (error) {
-    return { ads: [], status: buildSourceStatus("facebook_graph_api", 0, String(error)) };
-  }
+function mapParsedAds(parsed: ReturnType<typeof parseFacebookAdLibraryHtml>): FacebookAd[] {
+  return parsed.map((ad) => ({
+    id: ad.id,
+    pageName: ad.pageName,
+    adCreativeBody: ad.adCreativeBody,
+    adDeliveryStartTime: ad.adDeliveryStartTime,
+    platforms: ad.platforms,
+    isActive: true,
+  }));
 }
 
 async function searchViaPublicLibrary(
   searchTerm: string,
   country: string,
 ): Promise<{ ads: FacebookAd[]; status: ReturnType<typeof buildSourceStatus> }> {
+  const url = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&q=${encodeURIComponent(searchTerm)}&search_type=keyword_unordered&media_type=all`;
+
   try {
-    const url = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&q=${encodeURIComponent(searchTerm)}&search_type=keyword_unordered&media_type=all`;
     const html = await fetchText(url, { browserLike: true, timeoutMs: 15_000 });
-    const parsed = parseFacebookAdLibraryHtml(html);
+    const ads = mapParsedAds(parseFacebookAdLibraryHtml(html));
+    if (ads.length > 0) {
+      return {
+        ads,
+        status: buildSourceStatus("facebook_ad_library", ads.length, undefined, "Public Ad Library scrape"),
+      };
+    }
+  } catch (error) {
+    logger.warn("Facebook Ad Library HTTP scrape failed", { error: String(error) });
+  }
 
-    const ads: FacebookAd[] = parsed.map((ad) => ({
-      id: ad.id,
-      pageName: ad.pageName,
-      adCreativeBody: ad.adCreativeBody,
-      adDeliveryStartTime: ad.adDeliveryStartTime,
-      platforms: ad.platforms,
-      isActive: true,
-    }));
-
+  try {
+    const rendered = await fetchHtml(url, true);
+    const ads = mapParsedAds(parseFacebookAdLibraryHtml(rendered.html));
     return {
       ads,
       status: buildSourceStatus(
-        "facebook_ad_library",
+        "facebook_ad_library_puppeteer",
         ads.length,
-        ads.length === 0 ? "Page returned no parseable ads (may be blocked)" : undefined,
+        ads.length === 0 ? "Ad Library page loaded but no ads parsed (Meta may be blocking datacenter IPs)" : undefined,
+        ads.length > 0 ? "Puppeteer Ad Library scrape" : undefined,
       ),
     };
   } catch (error) {
-    logger.warn("Facebook Ad Library scrape failed", { error: String(error) });
-    return { ads: [], status: buildSourceStatus("facebook_ad_library", 0, String(error)) };
+    logger.warn("Facebook Ad Library puppeteer scrape failed", { error: String(error) });
+    return {
+      ads: [],
+      status: buildSourceStatus(
+        "facebook_ad_library",
+        0,
+        "Facebook Ad Library blocked HTTP and Puppeteer fallback",
+      ),
+    };
   }
 }
 
@@ -138,9 +138,12 @@ export async function analyzeFacebookAds(args: AnalyzeFacebookAdsInput) {
   const activeAds = ads.filter((a) => a.isActive);
   const uniqueAdvertisers = [...new Set(ads.map((a) => a.pageName))];
 
+  const apiError = sourceStatus.error;
   const scalingSignal =
     ads.length === 0
-      ? "UNAVAILABLE — no ad data retrieved; set FACEBOOK_ACCESS_TOKEN"
+      ? env.facebookAccessToken
+        ? `UNAVAILABLE — Facebook API failed${apiError ? `: ${apiError}` : ""}`
+        : "UNAVAILABLE — set FACEBOOK_ACCESS_TOKEN for Ad Library API"
       : activeAds.length >= 10
         ? "HIGH — many active ads suggest heavy ad spend"
         : activeAds.length >= 5
@@ -167,11 +170,17 @@ export async function analyzeFacebookAds(args: AnalyzeFacebookAdsInput) {
     })),
     advertisers: uniqueAdvertisers.slice(0, 10),
     recommendations: [
-      ads.length === 0
-        ? "Set FACEBOOK_ACCESS_TOKEN for reliable Ad Library API access. Public scrape is often blocked (403)."
-        : activeAds.length >= 5
-          ? "Multiple active ads — strong market validation signal from real Ad Library data."
-          : "Low ad volume — market may be untested or keyword too narrow.",
+      ads.length === 0 && apiError?.includes("verificação de identidade")
+        ? "Complete a verificação de identidade em https://www.facebook.com/ads/library/api e regenere o token com ads_read."
+        : ads.length === 0 && apiError?.includes("expirado")
+          ? "Gere um novo FACEBOOK_ACCESS_TOKEN (long-lived) no Graph API Explorer e atualize no Railway."
+          : ads.length === 0 && apiError?.includes("permissão")
+            ? "No app Meta (developers.facebook.com), adicione permissão ads_read e regenere o token."
+            : ads.length === 0
+              ? "Verifique manualmente em https://www.facebook.com/ads/library/?country=BR — datacenter IPs costumam ser bloqueados."
+              : activeAds.length >= 5
+                ? "Multiple active ads — strong market validation signal from real Ad Library data."
+                : "Low ad volume — market may be untested or keyword too narrow.",
     ],
     analyzedAt: new Date().toISOString(),
   };

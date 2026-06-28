@@ -3,12 +3,10 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { toolRichResult } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { parseToolData } from "../lib/tool-result.js";
+import { buildStrategicIntelligence } from "../lib/intelligence-engine.js";
 import { synthesizeMiningReport, type MiningDataInput } from "../lib/report-synthesizer.js";
-import {
-  buildMiningReportCharts,
-  buildMiningReportVisualMarkdown,
-  svgToBase64,
-} from "../lib/visualizations.js";
+import { buildStrategicIntelligenceMarkdown } from "../lib/strategic-visual.js";
+import { buildMiningReportCharts, svgToBase64 } from "../lib/visualizations.js";
 import { mineTrendingProducts } from "./mine-trending-products.js";
 import { analyzeFacebookAds } from "./analyze-facebook-ads.js";
 import { analyzeYoutubeTrends } from "./analyze-youtube-trends.js";
@@ -41,7 +39,9 @@ interface TrendingData {
 interface FacebookData {
   totalAds: number;
   activeAds: number;
+  uniqueAdvertisers: number;
   scalingSignal: string;
+  dataAvailability?: string;
   topCreatives?: Array<{ body: string }>;
 }
 
@@ -69,15 +69,6 @@ interface TiktokData {
 function defaultLanguage(country: string): string {
   const map: Record<string, string> = { BR: "pt", PT: "pt", US: "en", UK: "en", ES: "es", MX: "es" };
   return map[country.toUpperCase()] ?? "en";
-}
-
-function buildChannelSnapshot(
-  channels: Array<{ name: string; ok: boolean; highlight: string; ms: number }>,
-): string {
-  const rows = channels
-    .map((c) => `| ${c.name} | ${c.ok ? "✅" : "⚠️"} | ${c.highlight} | ${c.ms}ms |`)
-    .join("\n");
-  return `## Coleta Paralela (1 chamada)\n\n| Canal | Status | Destaque | Tempo |\n|-------|--------|----------|-------|\n${rows}`;
 }
 
 export async function analyzeNicheFull(args: AnalyzeNicheFullInput) {
@@ -174,44 +165,43 @@ export async function analyzeNicheFull(args: AnalyzeNicheFullInput) {
   };
 
   const report = synthesizeMiningReport(input);
-  const dataSourcesUsed: string[] = [];
-  if (collected_data.trending_products?.length) dataSourcesUsed.push("trending_products");
-  if (collected_data.facebook_ads) dataSourcesUsed.push("facebook_ads");
-  if (collected_data.tiktok_creatives) dataSourcesUsed.push("tiktok_creatives");
-  if (collected_data.youtube_trends) dataSourcesUsed.push("youtube_trends");
-  if (collected_data.google_seo) dataSourcesUsed.push("google_seo");
 
+  const channelMeta = {
+    trending: { ok: trending !== null, detail: trending ? `${trending.totalTrendingProducts} produtos` : timings.find((t) => t.name === "Trending")?.highlight },
+    facebook: {
+      ok: facebook !== null && facebook.dataAvailability !== "unavailable",
+      detail: facebook?.scalingSignal,
+      uniqueAdvertisers: facebook?.uniqueAdvertisers ?? 0,
+    },
+    youtube: { ok: youtube !== null && (youtube.totalVideos ?? 0) > 0, detail: youtube?.scalingSignal },
+    seo: { ok: seo !== null, detail: seo ? `${seo.searchVolume}/${seo.competition}` : undefined },
+    tiktok: { ok: tiktok !== null, detail: tiktok?.scalingSignal },
+  };
+
+  const intelligence = buildStrategicIntelligence(report, input, channelMeta);
+  const visualMarkdown = buildStrategicIntelligenceMarkdown(intelligence, input);
   const charts = buildMiningReportCharts(report, input);
-  const reportMarkdown = buildMiningReportVisualMarkdown(report, input, dataSourcesUsed);
-  const visualMarkdown = [buildChannelSnapshot(timings), "", reportMarkdown].join("\n");
 
   const result = {
     query: { niche, country, time_period, language },
-    orchestration: {
-      mode: "single_call_parallel",
-      totalMs: Date.now() - started,
-      channels: timings,
-    },
-    channelSummary: {
-      trending: trending
-        ? { count: trending.totalTrendingProducts, topPick: trending.trendingProducts[0]?.name ?? null }
-        : null,
-      facebook: facebook
-        ? { activeAds: facebook.activeAds, totalAds: facebook.totalAds, scalingSignal: facebook.scalingSignal }
-        : null,
-      youtube: youtube
-        ? { totalVideos: youtube.totalVideos, avgViews: youtube.avgViews, scalingSignal: youtube.scalingSignal }
-        : null,
-      seo: seo ? { searchVolume: seo.searchVolume, competition: seo.competition, opportunity: seo.seoOpportunity } : null,
-      tiktok: tiktok ? { totalFound: tiktok.totalFound, scalingSignal: tiktok.scalingSignal } : null,
+    orchestration: { mode: "single_call_parallel", totalMs: Date.now() - started, channels: timings },
+    opportunityScore: intelligence.opportunityScore,
+    confidenceScore: intelligence.confidence.score,
+    confidenceLabel: intelligence.confidence.label,
+    recommendation: intelligence.recommendation,
+    intelligence: {
+      dimensions: intelligence.dimensions,
+      saturation: intelligence.saturation,
+      gaps: intelligence.gaps,
+      strategy: intelligence.strategy,
+      risk: intelligence.risk,
+      strengths: intelligence.strengths,
+      weaknesses: intelligence.weaknesses,
+      entryPlan: intelligence.entryPlan,
+      scalePlan: intelligence.scalePlan,
     },
     report,
-    metadata: {
-      productName: niche,
-      country,
-      dataSourcesUsed,
-      generatedAt: report.generatedAt,
-    },
+    metadata: { productName: niche, country, generatedAt: report.generatedAt },
   };
 
   const chartImages = args.include_charts

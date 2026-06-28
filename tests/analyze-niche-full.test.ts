@@ -13,8 +13,8 @@ describe("analyzeNicheFull", () => {
     assert.equal(result.isError, undefined);
     assert.ok(result.content.length >= 2);
 
-    const markdown = result.content.find((c) => c.type === "text" && c.text?.includes("Coleta Paralela"));
-    assert.ok(markdown, "should include parallel collection summary");
+    const markdown = result.content.find((c) => c.type === "text" && c.text?.includes("Inteligência Estratégica"));
+    assert.ok(markdown, "should include strategic intelligence report");
 
     const images = result.content.filter((c) => c.type === "image");
     assert.equal(images.length, 0, "default should be light response without images");

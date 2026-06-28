@@ -2,11 +2,9 @@ import { z } from "zod";
 import { synthesizeMiningReport, type MiningDataInput } from "../lib/report-synthesizer.js";
 import { logger } from "../lib/logger.js";
 import { toolRichResult } from "../lib/errors.js";
-import {
-  buildMiningReportCharts,
-  buildMiningReportVisualMarkdown,
-  svgToBase64,
-} from "../lib/visualizations.js";
+import { buildStrategicIntelligence } from "../lib/intelligence-engine.js";
+import { buildStrategicIntelligenceMarkdown } from "../lib/strategic-visual.js";
+import { buildMiningReportCharts, svgToBase64 } from "../lib/visualizations.js";
 
 const trendingProductSchema = z.object({
   name: z.string(),
@@ -88,33 +86,34 @@ export async function generateMiningReport(args: GenerateMiningReportInput) {
   };
 
   const report = synthesizeMiningReport(input);
-  const dataSourcesUsed = countDataSources(collected_data);
+  const intelligence = buildStrategicIntelligence(report, input);
+  const visualMarkdown = buildStrategicIntelligenceMarkdown(intelligence, input);
   const charts = buildMiningReportCharts(report, input);
-  const visualMarkdown = buildMiningReportVisualMarkdown(report, input, dataSourcesUsed);
 
   const result = {
-    report,
-    visualSummary: {
-      markdown: visualMarkdown,
-      charts: {
-        scoreGauge: "attached",
-        scoreBreakdown: "attached",
-        channelStatus: "attached",
-      },
-      embeds: {
-        hint: "Use os links no markdown visual para abrir Ad Library, Google Trends e YouTube.",
-      },
+    opportunityScore: intelligence.opportunityScore,
+    confidenceScore: intelligence.confidence.score,
+    confidenceLabel: intelligence.confidence.label,
+    recommendation: intelligence.recommendation,
+    intelligence: {
+      dimensions: intelligence.dimensions,
+      saturation: intelligence.saturation,
+      gaps: intelligence.gaps,
+      strategy: intelligence.strategy,
+      risk: intelligence.risk,
     },
+    report,
     metadata: {
       productName: product_name ?? niche ?? "unspecified",
       country: country ?? "global",
-      dataSourcesUsed,
+      dataSourcesUsed: countDataSources(collected_data),
       generatedAt: report.generatedAt,
     },
   };
 
   return toolRichResult(result, {
     visualMarkdown,
+    compactJson: true,
     images: [
       { data: svgToBase64(charts.scoreGauge), mimeType: "image/svg+xml", title: "Opportunity Score" },
       { data: svgToBase64(charts.scoreBreakdown), mimeType: "image/svg+xml", title: "Score Breakdown" },

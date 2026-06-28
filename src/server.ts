@@ -12,7 +12,7 @@ export const SERVER_INFO: Implementation = {
   title: "The Miner MCP",
   version: SERVER_VERSION,
   description:
-    "MCP de mineração de ofertas. Para relatórios completos use analyze_niche_full (1 chamada). Tools individuais: trending, Facebook, YouTube, SEO, TikTok, landing page, competitor.",
+    "THE MINER MCP — Analista de oportunidades REAIS de lucro (e-commerce, dropshipping, infoprodutos). Gera Opportunity Score, Confidence Score, saturação, gaps e recomendação ENTRAR/TESTAR/AGUARDAR/EVITAR. Use generate_full_niche_report para pesquisas completas.",
   websiteUrl: "https://github.com/netty-linux/the-miner-mcp",
   icons: buildServerIcons(),
 };

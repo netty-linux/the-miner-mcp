@@ -64,9 +64,9 @@ async function safeHandler<S extends z.ZodTypeAny>(
  */
 export function registerTools(server: McpServer): void {
   const nicheFullConfig = {
-    title: "Full Niche Report (One Shot)",
+    title: "THE MINER — Relatório Estratégico Completo",
     description:
-      "★ USE THIS FOR COMPLETE REPORTS ★ Single call: trending + Facebook + YouTube + SEO + TikTok in parallel, then synthesized report. Do NOT call individual analyze_* tools when user wants 'relatório completo'. Returns visual markdown (Mermaid charts inside). Alias: generate_full_niche_report.",
+      "★ PRINCIPAL ★ Inteligência estratégica em 1 chamada: Opportunity Score, Confidence Score (com fontes que falharam), saturação/creative fatigue, gaps, estratégia, risco, recomendação ENTRAR|TESTAR|AGUARDAR|EVITAR. Orquestra Meta+TikTok+Google+YouTube+Trending. Nunca inventa dados. NÃO use tools individuais para relatório completo.",
     inputSchema: analyzeNicheFullSchema.shape,
   };
 

@@ -63,16 +63,19 @@ async function safeHandler<S extends z.ZodTypeAny>(
  * Extension point: add new tools here following the same pattern.
  */
 export function registerTools(server: McpServer): void {
-  server.registerTool(
-    "analyze_niche_full",
-    {
-      title: "Analyze Niche Full (One-Shot Report)",
-      description:
-        "PREFERRED for complete niche reports. Runs all channels in parallel (trending, Facebook, YouTube, SEO, TikTok) and returns a single rich visual report with charts — one MCP call instead of 6+. Use when user asks for 'relatório completo', 'full report', or niche analysis.",
-      inputSchema: analyzeNicheFullSchema.shape,
-    },
-    async (args) =>
-      safeHandler("analyze_niche_full", analyzeNicheFullSchema, analyzeNicheFull as ToolHandler, args),
+  const nicheFullConfig = {
+    title: "Full Niche Report (One Shot)",
+    description:
+      "★ USE THIS FOR COMPLETE REPORTS ★ Single call: trending + Facebook + YouTube + SEO + TikTok in parallel, then synthesized report. Do NOT call individual analyze_* tools when user wants 'relatório completo'. Returns visual markdown (Mermaid charts inside). Alias: generate_full_niche_report.",
+    inputSchema: analyzeNicheFullSchema.shape,
+  };
+
+  server.registerTool("generate_full_niche_report", nicheFullConfig, async (args) =>
+    safeHandler("generate_full_niche_report", analyzeNicheFullSchema, analyzeNicheFull as ToolHandler, args),
+  );
+
+  server.registerTool("analyze_niche_full", nicheFullConfig, async (args) =>
+    safeHandler("analyze_niche_full", analyzeNicheFullSchema, analyzeNicheFull as ToolHandler, args),
   );
 
   server.registerTool(

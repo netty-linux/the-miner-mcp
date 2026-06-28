@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Implementation } from "@modelcontextprotocol/sdk/types.js";
 import { buildServerIcons } from "./lib/server-icons.js";
+import { registerPrompts } from "./lib/register-prompts.js";
 import { registerTools } from "./tools/index.js";
 
 export const SERVER_NAME = "The Miner MCP";
@@ -26,9 +27,11 @@ export function createMinerServer(): McpServer {
     {
       capabilities: {
         logging: {},
+        prompts: {},
       },
     },
   );
   registerTools(server);
+  registerPrompts(server);
   return server;
 }

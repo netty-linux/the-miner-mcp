@@ -32,6 +32,9 @@ export const env = {
 
   // Future auth hook
   mcpAuthToken: process.env.MCP_AUTH_TOKEN,
+
+  // Grok compatibility: omit image blocks by default (markdown + Mermaid still included)
+  mcpLightResponse: process.env.MCP_LIGHT_RESPONSE !== "false",
 } as const;
 
 export function hasApiKey(key: keyof Pick<

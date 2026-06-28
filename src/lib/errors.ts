@@ -1,4 +1,5 @@
 import type { CallToolResult, ContentBlock } from "@modelcontextprotocol/sdk/types.js";
+import { env } from "../config/env.js";
 
 export interface ToolImage {
   data: string;
@@ -10,6 +11,7 @@ export interface RichToolResultOptions {
   visualMarkdown?: string;
   images?: ToolImage[];
   includeJson?: boolean;
+  compactJson?: boolean;
 }
 
 export class MinerToolError extends Error {
@@ -59,13 +61,15 @@ export function toolRichResult<T>(data: T, options: RichToolResultOptions = {}):
   }
 
   if (includeJson) {
+    const indent = options.compactJson ? undefined : 2;
     content.push({
       type: "text",
-      text: JSON.stringify({ success: true, data }, null, 2),
+      text: JSON.stringify({ success: true, data }, null, indent),
     });
   }
 
-  for (const image of options.images ?? []) {
+  const images = env.mcpLightResponse ? undefined : options.images;
+  for (const image of images ?? []) {
     content.push({
       type: "image",
       data: image.data,

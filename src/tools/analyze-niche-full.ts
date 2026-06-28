@@ -24,6 +24,11 @@ export const analyzeNicheFullSchema = z.object({
     .default("last_30_days")
     .describe("Trend window for trending products"),
   language: z.string().optional().describe("Language code for SEO (defaults by country)"),
+  include_charts: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("Attach SVG chart images (off by default for Grok compatibility)"),
 });
 
 export type AnalyzeNicheFullInput = z.infer<typeof analyzeNicheFullSchema>;
@@ -36,6 +41,7 @@ interface TrendingData {
 interface FacebookData {
   totalAds: number;
   activeAds: number;
+  scalingSignal: string;
   topCreatives?: Array<{ body: string }>;
 }
 
@@ -43,11 +49,13 @@ interface YoutubeData {
   totalVideos: number;
   avgViews: number | null;
   topTitles: string[];
+  scalingSignal: string;
 }
 
 interface SeoData {
   searchVolume: string;
   competition: string;
+  seoOpportunity: string;
   relatedKeywords?: Array<{ keyword: string }>;
 }
 
@@ -55,6 +63,7 @@ interface TiktokData {
   totalFound: number;
   topHooks: string[];
   avgLikes: number | null;
+  scalingSignal: string;
 }
 
 function defaultLanguage(country: string): string {
@@ -182,17 +191,21 @@ export async function analyzeNicheFull(args: AnalyzeNicheFullInput) {
       mode: "single_call_parallel",
       totalMs: Date.now() - started,
       channels: timings,
-      hint: "Use esta tool para relatórios completos — evita 6+ chamadas sequenciais que causam timeout no Grok.",
     },
-    channelData: {
-      trending,
-      facebook,
-      youtube,
-      seo,
-      tiktok,
+    channelSummary: {
+      trending: trending
+        ? { count: trending.totalTrendingProducts, topPick: trending.trendingProducts[0]?.name ?? null }
+        : null,
+      facebook: facebook
+        ? { activeAds: facebook.activeAds, totalAds: facebook.totalAds, scalingSignal: facebook.scalingSignal }
+        : null,
+      youtube: youtube
+        ? { totalVideos: youtube.totalVideos, avgViews: youtube.avgViews, scalingSignal: youtube.scalingSignal }
+        : null,
+      seo: seo ? { searchVolume: seo.searchVolume, competition: seo.competition, opportunity: seo.seoOpportunity } : null,
+      tiktok: tiktok ? { totalFound: tiktok.totalFound, scalingSignal: tiktok.scalingSignal } : null,
     },
     report,
-    visualSummary: { markdown: visualMarkdown },
     metadata: {
       productName: niche,
       country,
@@ -201,12 +214,17 @@ export async function analyzeNicheFull(args: AnalyzeNicheFullInput) {
     },
   };
 
+  const chartImages = args.include_charts
+    ? [
+        { data: svgToBase64(charts.scoreGauge), mimeType: "image/svg+xml", title: "Opportunity Score" },
+        { data: svgToBase64(charts.scoreBreakdown), mimeType: "image/svg+xml", title: "Score Breakdown" },
+        { data: svgToBase64(charts.channelStatus), mimeType: "image/svg+xml", title: "Channel Evidence" },
+      ]
+    : undefined;
+
   return toolRichResult(result, {
     visualMarkdown,
-    images: [
-      { data: svgToBase64(charts.scoreGauge), mimeType: "image/svg+xml", title: "Opportunity Score" },
-      { data: svgToBase64(charts.scoreBreakdown), mimeType: "image/svg+xml", title: "Score Breakdown" },
-      { data: svgToBase64(charts.channelStatus), mimeType: "image/svg+xml", title: "Channel Evidence" },
-    ],
+    images: chartImages,
+    compactJson: true,
   });
 }

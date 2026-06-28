@@ -54,8 +54,8 @@ const TOOL_CALLS: Array<{ tool: string; args: Record<string, unknown> }> = [
 
 function parseToolData(result: unknown): Record<string, unknown> {
   const content = (result as { content: Array<{ type: string; text?: string }> }).content;
-  const text = content.filter((c) => c.type === "text").map((c) => c.text ?? "").join("");
-  const parsed = JSON.parse(text) as { success: boolean; data: Record<string, unknown> };
+  const jsonBlock = content.find((c) => c.type === "text" && c.text?.includes('"success"'));
+  const parsed = JSON.parse(jsonBlock?.text ?? "{}") as { success: boolean; data: Record<string, unknown> };
   if (!parsed.success) throw new Error("Tool returned success:false");
   return parsed.data;
 }

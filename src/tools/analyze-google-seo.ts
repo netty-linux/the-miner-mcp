@@ -1,7 +1,19 @@
 import { z } from "zod";
 import { env } from "../config/env.js";
-import { fetchJson, fetchText } from "../lib/http.js";
-import { buildSourceStatus } from "../lib/data-availability.js";
+import { fetchJson } from "../lib/http.js";
+import { buildSourceStatus, overallAvailability } from "../lib/data-availability.js";
+import {
+  buildSeoOpportunity,
+  estimateCompetition,
+  estimateSearchVolume,
+  fetchGoogleAutocomplete,
+  fetchGoogleTrendsBundle,
+  fetchPeopleAlsoAsk,
+  fetchRedditKeywordSignals,
+  fetchWikipediaTrend,
+  mergeRelatedKeywords,
+  type RelatedKeyword,
+} from "../lib/google-seo-sources.js";
 import { logger } from "../lib/logger.js";
 import { toolSuccessResult } from "../lib/errors.js";
 
@@ -13,25 +25,23 @@ export const analyzeGoogleSeoSchema = z.object({
 
 export type AnalyzeGoogleSeoInput = z.infer<typeof analyzeGoogleSeoSchema>;
 
-interface RelatedKeyword {
-  keyword: string;
-  relevance: number;
-}
-
-async function fetchSerpApi(keyword: string, country: string): Promise<{
+async function fetchSerpApiFallback(
+  keyword: string,
+  country: string,
+): Promise<{
   searchVolume: string;
   competition: string;
   relatedKeywords: RelatedKeyword[];
 } | null> {
   if (!env.serpApiKey) return null;
 
-  const url = new URL("https://serpapi.com/search.json");
-  url.searchParams.set("engine", "google_trends");
-  url.searchParams.set("q", keyword);
-  url.searchParams.set("geo", country);
-  url.searchParams.set("api_key", env.serpApiKey);
-
   try {
+    const url = new URL("https://serpapi.com/search.json");
+    url.searchParams.set("engine", "google_trends");
+    url.searchParams.set("q", keyword);
+    url.searchParams.set("geo", country);
+    url.searchParams.set("api_key", env.serpApiKey);
+
     const data = await fetchJson<{
       interest_over_time?: { timeline_data?: Array<{ values?: Array<{ value: number }> }> };
       related_queries?: { rising?: Array<{ query: string; value: number }> };
@@ -52,150 +62,123 @@ async function fetchSerpApi(keyword: string, country: string): Promise<{
       relatedKeywords: rising.slice(0, 15).map((r) => ({
         keyword: r.query,
         relevance: r.value,
+        type: "rising" as const,
       })),
     };
   } catch (error) {
-    logger.warn("SerpAPI fetch failed", { error: String(error) });
+    logger.warn("SerpAPI fallback failed", { error: String(error) });
     return null;
-  }
-}
-
-async function fetchGoogleTrendsRelated(
-  keyword: string,
-  country: string,
-): Promise<RelatedKeyword[]> {
-  try {
-    const url = `https://trends.google.com/trends/api/relatedsearches?hl=en-US&tz=360&req=${encodeURIComponent(
-      JSON.stringify({
-        restriction: {
-          geo: { country: country },
-          time: "today 3-m",
-          originalTimeRangeForExploreUrl: "today 3-m",
-        },
-        keywordType: "QUERY",
-        metric: ["TOP", "RISING"],
-        trendinessSettings: { minThreshold: 0, compareTime: "today 3-m" },
-        requestOptions: { property: "", backend: "IZG", category: 0 },
-        language: "en",
-        userConfig: { userType: "USER_TYPE_LEGIT_USER" },
-        userType: "USER_TYPE_LEGIT_USER",
-      }),
-    )}&token=RELATED_QUERIES&tz=360`;
-    const text = await fetchText(url);
-    const cleaned = text.replace(/^\)\]\}',?\n?/, "");
-    const data = JSON.parse(cleaned) as {
-      default?: {
-        rankedList?: Array<{
-          rankedKeyword?: Array<{ query: string; value: number }>;
-        }>;
-      };
-    };
-
-    const keywords: RelatedKeyword[] = [];
-    for (const list of data.default?.rankedList ?? []) {
-      for (const item of list.rankedKeyword ?? []) {
-        keywords.push({ keyword: item.query, relevance: item.value });
-      }
-    }
-    return keywords.slice(0, 20);
-  } catch (error) {
-    logger.warn("Google Trends related searches failed", { error: String(error) });
-    return [];
-  }
-}
-
-async function fetchGoogleAutocomplete(keyword: string): Promise<string[]> {
-  try {
-    const url = `https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent(keyword)}`;
-    const text = await fetchText(url, { browserLike: true });
-    const data = JSON.parse(text) as [string, string[]];
-    return (data[1] ?? []).slice(0, 10);
-  } catch {
-    return [];
   }
 }
 
 export async function analyzeGoogleSeo(args: AnalyzeGoogleSeoInput) {
   const { keyword, country = "US", language = "en" } = args;
-  logger.info("Analyzing Google SEO", { keyword, country, language });
+  logger.info("Analyzing Google SEO (free sources stack)", { keyword, country, language });
 
-  let searchVolume: string | null = null;
-  let competition: string | null = null;
-  let relatedKeywords: RelatedKeyword[] = [];
-  let dataSource = "google_autocomplete";
+  const [trends, autocomplete, paa, reddit, wikipedia, serpFallback] = await Promise.all([
+    fetchGoogleTrendsBundle(keyword, country),
+    fetchGoogleAutocomplete(keyword),
+    fetchPeopleAlsoAsk(keyword, country, language),
+    fetchRedditKeywordSignals(keyword),
+    fetchWikipediaTrend(keyword),
+    fetchSerpApiFallback(keyword, country),
+  ]);
 
-  const serpData = await fetchSerpApi(keyword, country);
-  if (serpData) {
-    searchVolume = serpData.searchVolume;
-    competition = serpData.competition;
-    relatedKeywords = serpData.relatedKeywords;
-    dataSource = "serpapi";
-  } else {
-    relatedKeywords = await fetchGoogleTrendsRelated(keyword, country);
-    if (relatedKeywords.length > 0) {
-      dataSource = "google_trends_related";
-      searchVolume = relatedKeywords.length > 10 ? "high" : relatedKeywords.length > 5 ? "medium" : "low";
-      competition = relatedKeywords.filter((r) => r.relevance > 80).length > 5 ? "high" : "medium";
-    }
+  const relatedKeywords = mergeRelatedKeywords(trends, autocomplete.suggestions, paa.questions);
+  const redditAvgScore =
+    reddit.signals.length > 0
+      ? Math.round(reddit.signals.reduce((sum, s) => sum + s.score, 0) / reddit.signals.length)
+      : 0;
+
+  let searchVolume = estimateSearchVolume({
+    interest: trends.interest,
+    risingCount: trends.risingKeywords.length,
+    redditAvgScore,
+    wikiDailyAverage: wikipedia.trend?.dailyAverage ?? 0,
+    autocompleteCount: autocomplete.suggestions.length,
+  });
+
+  let competition = estimateCompetition({
+    topCount: trends.topKeywords.length,
+    risingCount: trends.risingKeywords.length,
+    paaCount: paa.questions.length,
+    regionalLeaders: trends.regional.filter((r) => r.score >= 70).length,
+  });
+
+  const dataSources = [
+    "google_trends",
+    "google_autocomplete",
+    "people_also_ask",
+    "reddit_search",
+    "wikipedia_pageviews",
+  ];
+
+  if (serpFallback) {
+    searchVolume = serpFallback.searchVolume;
+    competition = serpFallback.competition;
+    dataSources.push("serpapi_fallback");
   }
 
-  const autocompleteSuggestions = await fetchGoogleAutocomplete(keyword);
-  for (const term of autocompleteSuggestions) {
-    if (!relatedKeywords.find((r) => r.keyword === term)) {
-      relatedKeywords.push({ keyword: term, relevance: 50 });
-    }
+  const sourceStatuses = [
+    trends.status,
+    autocomplete.status,
+    paa.status,
+    reddit.status,
+    wikipedia.status,
+  ];
+  if (serpFallback) {
+    sourceStatuses.push(buildSourceStatus("serpapi_fallback", serpFallback.relatedKeywords.length));
   }
 
-  if (searchVolume === null) {
-    searchVolume = autocompleteSuggestions.length >= 8 ? "medium" : autocompleteSuggestions.length >= 3 ? "low" : "unknown";
-    competition = "unknown";
-  }
-
-  const dataAvailability =
-    serpData || relatedKeywords.some((r) => r.relevance > 50)
-      ? autocompleteSuggestions.length > 0
-        ? "available"
-        : "partial"
-      : autocompleteSuggestions.length > 0
-        ? "partial"
-        : "unavailable";
+  const dataAvailability = overallAvailability(sourceStatuses);
 
   const result = {
     query: { keyword, country, language },
-    dataSource,
+    dataSources,
     dataAvailability,
-    source: buildSourceStatus(dataSource, relatedKeywords.length),
+    sources: sourceStatuses,
     apiKeysUsed: {
       serpApi: Boolean(env.serpApiKey),
       googleApi: Boolean(env.googleApiKey),
+      stack: "free_multi_source",
     },
     searchVolume,
     competition,
-    seoOpportunity:
-      searchVolume === "unknown"
-        ? "UNKNOWN — insufficient data; set SERP_API_KEY for volume estimates"
-        : searchVolume === "high" && competition === "low"
-          ? "EXCELLENT — high volume, low competition"
-          : searchVolume === "high"
-            ? "GOOD — high volume but competitive"
-            : competition === "low"
-              ? "MODERATE — low competition niche"
-              : "CHALLENGING — needs long-tail strategy",
+    interestOverTime: trends.interest,
+    regionalInterest: trends.regional,
+    risingKeywords: trends.risingKeywords.slice(0, 10),
+    topKeywords: trends.topKeywords.slice(0, 10),
+    peopleAlsoAsk: paa.questions,
+    redditSignals: reddit.signals.slice(0, 8),
+    wikipediaTrend: wikipedia.trend,
+    seoOpportunity: buildSeoOpportunity(searchVolume, competition),
     relatedKeywords: relatedKeywords.slice(0, 15),
-    autocompleteSuggestions,
+    autocompleteSuggestions: autocomplete.suggestions,
     longTailSuggestions: relatedKeywords
       .filter((r) => r.keyword.split(" ").length >= 3)
       .slice(0, 8)
       .map((r) => r.keyword),
     recommendations: [
-      !env.serpApiKey
-        ? "Set SERP_API_KEY for verified search volume and competition data. Autocomplete suggestions are real but not volume metrics."
-        : "Using SerpAPI for verified SEO metrics.",
-      `Target long-tail: "${relatedKeywords[0]?.keyword ?? keyword + " review"}" for faster ranking.`,
-      autocompleteSuggestions.length > 0
-        ? `Content ideas from autocomplete: ${autocompleteSuggestions.slice(0, 3).join(", ")}`
-        : "Create comparison and review content around the main keyword.",
-    ],
+      trends.interest
+        ? `Google Trends interest avg ${trends.interest.average}/100 (${trends.interest.momentum}) for ${country}.`
+        : "Google Trends interest unavailable — rely on rising queries and Reddit demand signals.",
+      paa.questions.length > 0
+        ? `Answer PAA questions in content: "${paa.questions.slice(0, 2).join('", "')}"`
+        : "Create FAQ content around buyer-intent questions for this keyword.",
+      reddit.signals.length > 0
+        ? `Reddit demand signal: avg ${redditAvgScore} upvotes across ${reddit.signals.length} relevant posts.`
+        : "No strong Reddit threads found — validate demand via Facebook/YouTube tools.",
+      trends.regional.length > 0
+        ? `Top regional interest: ${trends.regional
+            .slice(0, 3)
+            .map((r) => `${r.region} (${r.score})`)
+            .join(", ")}`
+        : undefined,
+      wikipedia.trend
+        ? `Wikipedia views ~${wikipedia.trend.dailyAverage}/day (${wikipedia.trend.momentum}) — informational demand present.`
+        : undefined,
+      `Target long-tail: "${relatedKeywords[0]?.keyword ?? `${keyword} review`}" for faster ranking.`,
+    ].filter(Boolean),
     analyzedAt: new Date().toISOString(),
   };
 

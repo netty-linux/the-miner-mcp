@@ -4,6 +4,8 @@ import {
   getRedditUserAgent,
   getSubredditsForNiche,
   isRedditApiConfigured,
+  isRedditPasswordConfigured,
+  isRedditRefreshConfigured,
   parseRedditListing,
 } from "../src/lib/reddit-client.js";
 
@@ -38,6 +40,8 @@ describe("reddit-client", () => {
 
   it("reports unconfigured Reddit API without env vars", () => {
     assert.equal(isRedditApiConfigured(), false);
+    assert.equal(isRedditRefreshConfigured(), false);
+    assert.equal(isRedditPasswordConfigured(), false);
     assert.match(getRedditUserAgent(), /TheMinerMCP/);
   });
 });

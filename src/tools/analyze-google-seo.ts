@@ -172,7 +172,7 @@ export async function analyzeGoogleSeo(args: AnalyzeGoogleSeoInput) {
         ? `Reddit demand signal (${reddit.via}): avg ${redditAvgScore} upvotes across ${reddit.signals.length} relevant posts.`
         : isRedditApiConfigured()
           ? "Reddit API configured but no strong threads found for this keyword."
-          : "No strong Reddit threads — set REDDIT_CLIENT_ID/SECRET/USERNAME/PASSWORD for reliable API access.",
+          : "No strong Reddit threads — set REDDIT_REFRESH_TOKEN (web app) or REDDIT_USERNAME/PASSWORD (script app).",
       trends.regional.length > 0
         ? `Top regional interest: ${trends.regional
             .slice(0, 3)

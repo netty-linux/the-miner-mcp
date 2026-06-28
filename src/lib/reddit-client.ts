@@ -35,13 +35,23 @@ interface TokenCache {
 
 let tokenCache: TokenCache | null = null;
 
-export function isRedditApiConfigured(): boolean {
+export function isRedditRefreshConfigured(): boolean {
+  return Boolean(
+    env.redditClientId && env.redditClientSecret && env.redditRefreshToken,
+  );
+}
+
+export function isRedditPasswordConfigured(): boolean {
   return Boolean(
     env.redditClientId &&
       env.redditClientSecret &&
       env.redditUsername &&
       env.redditPassword,
   );
+}
+
+export function isRedditApiConfigured(): boolean {
+  return isRedditRefreshConfigured() || isRedditPasswordConfigured();
 }
 
 export function getRedditUserAgent(): string {
@@ -65,44 +75,39 @@ export function parseRedditListing(data: RedditListing): RedditPost[] {
   }));
 }
 
-async function fetchRedditAccessToken(): Promise<string | null> {
-  if (!isRedditApiConfigured()) return null;
+function getRedditBasicAuth(): string {
+  return Buffer.from(`${env.redditClientId}:${env.redditClientSecret}`).toString(
+    "base64",
+  );
+}
 
-  if (tokenCache && Date.now() < tokenCache.expiresAt - 60_000) {
-    return tokenCache.token;
-  }
-
-  const credentials = Buffer.from(
-    `${env.redditClientId}:${env.redditClientSecret}`,
-  ).toString("base64");
-
-  const body = new URLSearchParams({
-    grant_type: "password",
-    username: env.redditUsername!,
-    password: env.redditPassword!,
-    scope: "read",
-  });
-
+async function requestRedditToken(
+  body: URLSearchParams,
+  grantType: "refresh_token" | "password",
+): Promise<string | null> {
   try {
     const response = await fetchWithTimeout("https://www.reddit.com/api/v1/access_token", {
       method: "POST",
       body: body.toString(),
       headers: {
-        Authorization: `Basic ${credentials}`,
+        Authorization: `Basic ${getRedditBasicAuth()}`,
         "Content-Type": "application/x-www-form-urlencoded",
         "User-Agent": getRedditUserAgent(),
       },
       timeoutMs: 12_000,
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
     const payload = (await response.json()) as {
       access_token?: string;
       expires_in?: number;
+      error?: string;
+      error_description?: string;
     };
+
+    if (!response.ok) {
+      const detail = payload.error_description ?? payload.error ?? `HTTP ${response.status}`;
+      throw new Error(detail);
+    }
 
     if (!payload.access_token) {
       throw new Error("Missing access_token in Reddit OAuth response");
@@ -115,10 +120,42 @@ async function fetchRedditAccessToken(): Promise<string | null> {
 
     return payload.access_token;
   } catch (error) {
-    logger.warn("Reddit OAuth token request failed", { error: String(error) });
+    logger.warn("Reddit OAuth token request failed", {
+      grantType,
+      error: String(error),
+    });
     tokenCache = null;
     return null;
   }
+}
+
+async function fetchRedditAccessToken(): Promise<string | null> {
+  if (!isRedditApiConfigured()) return null;
+
+  if (tokenCache && Date.now() < tokenCache.expiresAt - 60_000) {
+    return tokenCache.token;
+  }
+
+  if (isRedditRefreshConfigured()) {
+    const refreshBody = new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: env.redditRefreshToken!,
+    });
+    const refreshToken = await requestRedditToken(refreshBody, "refresh_token");
+    if (refreshToken) return refreshToken;
+  }
+
+  if (isRedditPasswordConfigured()) {
+    const passwordBody = new URLSearchParams({
+      grant_type: "password",
+      username: env.redditUsername!,
+      password: env.redditPassword!,
+      scope: "read",
+    });
+    return requestRedditToken(passwordBody, "password");
+  }
+
+  return null;
 }
 
 async function fetchRedditListing(path: string): Promise<RedditListing | null> {

@@ -14,11 +14,13 @@ export const env = {
   googleApiKey: process.env.GOOGLE_API_KEY,
   serpApiKey: process.env.SERP_API_KEY,
 
-  // Reddit Data API (OAuth script app — not Devvit RedditAPIClient)
+  // Reddit Data API — script (password) or web app (refresh token)
   redditClientId: process.env.REDDIT_CLIENT_ID,
   redditClientSecret: process.env.REDDIT_CLIENT_SECRET,
   redditUsername: process.env.REDDIT_USERNAME,
   redditPassword: process.env.REDDIT_PASSWORD,
+  redditRefreshToken: process.env.REDDIT_REFRESH_TOKEN,
+  redditRedirectUri: process.env.REDDIT_REDIRECT_URI ?? "http://localhost:8080",
   redditUserAgent: process.env.REDDIT_USER_AGENT,
 
   // Future auth hook

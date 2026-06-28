@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "test": "tsx --test --test-concurrency=1 tests/**/*.test.ts",
-    "verify": "tsx scripts/verify-mcp.ts"
+    "verify": "tsx scripts/verify-mcp.ts",
+    "reddit:setup": "tsx scripts/reddit-oauth-setup.ts"
   },
   "engines": {
     "node": ">=20.0.0"

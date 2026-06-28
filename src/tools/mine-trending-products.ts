@@ -206,7 +206,7 @@ async function fetchRedditTrending(niche: string): Promise<{
       products.length === 0
         ? isRedditApiConfigured()
           ? "Reddit API returned no high-engagement posts"
-          : "Reddit blocked (403) — configure REDDIT_CLIENT_ID/SECRET/USERNAME/PASSWORD"
+          : "Reddit blocked (403) — configure REDDIT_REFRESH_TOKEN (npm run reddit:setup)"
         : undefined,
       isRedditApiConfigured() ? "Reddit Data API (OAuth)" : undefined,
     ),

@@ -474,7 +474,7 @@ export async function fetchRedditKeywordSignals(keyword: string): Promise<{
       0,
       isRedditApiConfigured()
         ? "Reddit API returned no posts for keyword"
-        : "Configure REDDIT_CLIENT_ID/SECRET/USERNAME/PASSWORD or Reddit blocked (403)",
+        : "Configure REDDIT_REFRESH_TOKEN or Reddit blocked (403)",
     ),
   };
 }

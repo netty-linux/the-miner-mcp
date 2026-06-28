@@ -2,6 +2,11 @@ import type { Request, Response, NextFunction } from "express";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { env } from "./config/env.js";
+import {
+  isRedditApiConfigured,
+  isRedditRefreshConfigured,
+  searchRedditPosts,
+} from "./lib/reddit-client.js";
 import { createMinerServer, SERVER_NAME } from "./server.js";
 import { closeBrowser } from "./lib/scraping.js";
 import { logger } from "./lib/logger.js";
@@ -32,12 +37,31 @@ function optionalAuthMiddleware(req: Request, res: Response, next: NextFunction)
 
 const app = createMcpExpressApp({ host: env.host });
 
-app.get("/health", (_req, res) => {
+app.get("/health", async (_req, res) => {
+  let reddit: {
+    configured: boolean;
+    refreshMode: boolean;
+    via: "oauth" | "public" | "none";
+  } = {
+    configured: false,
+    refreshMode: false,
+    via: "none",
+  };
+
+  if (isRedditApiConfigured()) {
+    reddit = {
+      configured: true,
+      refreshMode: isRedditRefreshConfigured(),
+      via: (await searchRedditPosts("fitness", 1)).via,
+    };
+  }
+
   res.json({
     status: "ok",
     server: SERVER_NAME,
     version: "1.0.0",
     endpoint: MCP_ENDPOINT,
+    reddit,
   });
 });
 
